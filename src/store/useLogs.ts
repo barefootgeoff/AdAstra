@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import type { WorkoutLog } from '../models/log'
-import { getWorkoutLogs, upsertWorkoutLog, deleteWorkoutLog } from './storage'
+import { getWorkoutLogs, upsertWorkoutLog, bulkUpsertWorkoutLogs, deleteWorkoutLog } from './storage'
 import { buildLoadHistory } from '../utils/trainingMath'
 
 export function useLogs(seedDate: string, seedCTL: number, seedATL: number) {
@@ -13,6 +13,11 @@ export function useLogs(seedDate: string, seedCTL: number, seedATL: number) {
 
   const removeLog = useCallback((id: string) => {
     deleteWorkoutLog(id)
+    setLogs(getWorkoutLogs())
+  }, [])
+
+  const syncLogs = useCallback((incoming: WorkoutLog[]) => {
+    bulkUpsertWorkoutLogs(incoming)
     setLogs(getWorkoutLogs())
   }, [])
 
@@ -31,5 +36,5 @@ export function useLogs(seedDate: string, seedCTL: number, seedATL: number) {
   // Latest training load snapshot
   const latestLoad = loadHistory[loadHistory.length - 1] ?? null
 
-  return { logs, saveLog, removeLog, logForDate, loadHistory, latestLoad }
+  return { logs, saveLog, removeLog, syncLogs, logForDate, loadHistory, latestLoad }
 }
