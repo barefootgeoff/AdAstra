@@ -1,5 +1,6 @@
 import { useAthlete } from './store/useAthlete'
 import { useLogs } from './store/useLogs'
+import { useStrava } from './hooks/useStrava'
 import { LEADVILLE_2026 } from './data/leadville2026'
 import { AthleteDashboard } from './components/analysis/AthleteDashboard'
 import { TrainingLoadChart } from './components/analysis/TrainingLoadChart'
@@ -11,25 +12,56 @@ const SEED_DATE = '2026-03-15'
 
 export default function App() {
   const { athlete } = useAthlete()
-  const { logs, saveLog, loadHistory, latestLoad } = useLogs(
+  const { logs, saveLog, syncLogs, loadHistory, latestLoad } = useLogs(
     SEED_DATE,
     athlete.ctlBaseline,
     // ATL seed: same as CTL for stable starting point (TSB ≈ 0)
     athlete.ctlBaseline,
   )
+  const { status: stravaStatus, lastSynced, connect, sync } = useStrava(athlete.ftp, syncLogs)
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 pb-16">
       <div className="max-w-2xl mx-auto">
 
         {/* Header */}
-        <div className="mb-5">
-          <h1 className="text-2xl font-bold tracking-tight text-white" style={{ fontFamily: 'Georgia, serif' }}>
-            LT100 MTB — Training Plan
-          </h1>
-          <p className="text-zinc-500 text-xs mt-1 tracking-wider uppercase">
-            Race Across the Sky · August 15, 2026 · Sub-9 Hour Target
-          </p>
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-white" style={{ fontFamily: 'Georgia, serif' }}>
+              LT100 MTB — Training Plan
+            </h1>
+            <p className="text-zinc-500 text-xs mt-1 tracking-wider uppercase">
+              Race Across the Sky · August 15, 2026 · Sub-9 Hour Target
+            </p>
+          </div>
+
+          {/* Strava sync button */}
+          <div className="flex flex-col items-end gap-1 shrink-0 ml-4">
+            {stravaStatus === 'not_connected' ? (
+              <button
+                onClick={connect}
+                className="text-xs bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded font-medium transition-colors"
+              >
+                Connect Strava
+              </button>
+            ) : (
+              <button
+                onClick={sync}
+                disabled={stravaStatus === 'syncing'}
+                className="text-xs bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 px-3 py-1.5 rounded font-medium transition-colors"
+              >
+                {stravaStatus === 'syncing' ? 'Syncing…' : 'Sync Strava'}
+              </button>
+            )}
+            {lastSynced && (
+              <span className="text-[10px] text-zinc-600">
+                Last synced {lastSynced.toLocaleTimeString()}
+              </span>
+            )}
+            {stravaStatus === 'error' && (
+              <span className="text-[10px] text-red-500">Sync failed — try again</span>
+            )}
+          </div>
         </div>
 
         {/* Athlete dashboard — live CTL/ATL/TSB */}

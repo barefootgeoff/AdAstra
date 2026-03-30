@@ -43,6 +43,13 @@ export function upsertWorkoutLog(log: WorkoutLog): void {
   localStorage.setItem(KEYS.LOGS, JSON.stringify(logs))
 }
 
+export function bulkUpsertWorkoutLogs(incoming: WorkoutLog[]): void {
+  const logs = getWorkoutLogs()
+  const byId = new Map(logs.map(l => [l.id, l]))
+  for (const log of incoming) byId.set(log.id, log)
+  localStorage.setItem(KEYS.LOGS, JSON.stringify([...byId.values()]))
+}
+
 export function deleteWorkoutLog(id: string): void {
   const logs = getWorkoutLogs().filter(l => l.id !== id)
   localStorage.setItem(KEYS.LOGS, JSON.stringify(logs))
