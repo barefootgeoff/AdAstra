@@ -1,0 +1,67 @@
+import { kv } from '@vercel/kv'
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { requireAuth } from './_session'
+import type { AthleteProfile } from '../src/models/athlete'
+import type { WorkoutLog } from '../src/models/log'
+
+const KEYS = {
+  ATHLETE: 'athlete',
+  LOGS: 'logs',
+} as const
+
+// ─── GET /api/data ─────────────────────────────────────────────────────────
+// Returns { athlete, logs }
+async function handleGet(res: VercelResponse) {
+  const [athlete, logs] = await Promise.all([
+    kv.get<AthleteProfile>(KEYS.ATHLETE),
+    kv.get<WorkoutLog[]>(KEYS.LOGS),
+  ])
+  res.status(200).json({ athlete: athlete ?? null, logs: logs ?? [] })
+}
+
+// ─── PUT /api/data?resource=athlete ────────────────────────────────────────
+async function handlePutAthlete(req: VercelRequest, res: VercelResponse) {
+  const athlete = req.body as AthleteProfile
+  if (!athlete?.id) {
+    res.status(400).json({ error: 'invalid_athlete' })
+    return
+  }
+  await kv.set(KEYS.ATHLETE, athlete)
+  res.status(200).json({ ok: true })
+}
+
+// ─── PUT /api/data?resource=logs ───────────────────────────────────────────
+// Bulk upserts: merges incoming logs with existing by id
+async function handlePutLogs(req: VercelRequest, res: VercelResponse) {
+  const incoming = req.body as WorkoutLog[]
+  if (!Array.isArray(incoming)) {
+    res.status(400).json({ error: 'expected_array' })
+    return
+  }
+  const existing = (await kv.get<WorkoutLog[]>(KEYS.LOGS)) ?? []
+  const byId = new Map(existing.map(l => [l.id, l]))
+  for (const log of incoming) byId.set(log.id, log)
+  await kv.set(KEYS.LOGS, [...byId.values()])
+  res.status(200).json({ ok: true })
+}
+
+// ─── Handler ─────────────────────────────────────────────────────────────────
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAuth(req, res)) return
+
+  try {
+    if (req.method === 'GET') {
+      await handleGet(res)
+    } else if (req.method === 'PUT') {
+      const resource = req.query.resource as string
+      if (resource === 'athlete') await handlePutAthlete(req, res)
+      else if (resource === 'logs') await handlePutLogs(req, res)
+      else res.status(400).json({ error: 'unknown_resource' })
+    } else {
+      res.status(405).end()
+    }
+  } catch (err) {
+    console.error('api/data error:', err)
+    res.status(500).json({ error: 'internal_error' })
+  }
+}

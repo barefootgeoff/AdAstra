@@ -1,41 +1,97 @@
+import { useState, useEffect } from 'react'
 import { useAthlete } from './store/useAthlete'
 import { useLogs } from './store/useLogs'
 import { useStrava } from './hooks/useStrava'
+import { useServerSync } from './hooks/useServerSync'
 import { LEADVILLE_2026 } from './data/leadville2026'
 import { AthleteDashboard } from './components/analysis/AthleteDashboard'
 import { TrainingLoadChart } from './components/analysis/TrainingLoadChart'
 import { WeeklyTSSSummary } from './components/analysis/WeeklyTSSSummary'
 import { WeekBlock } from './components/plan/WeekBlock'
+import { LoginScreen } from './components/LoginScreen'
+import { TodayView } from './components/today/TodayView'
+import { planDateToISO, todayISO } from './utils/dateHelpers'
 
 // The seed date is the day before Week 11 starts — baseline state
 const SEED_DATE = '2026-03-15'
 
+type Tab = 'today' | 'plan' | 'fitness'
+
+// Find the index of the week that contains today, for auto-open
+function currentWeekIndex(): number {
+  const today = todayISO()
+  for (let i = 0; i < LEADVILLE_2026.weeks.length; i++) {
+    const week = LEADVILLE_2026.weeks[i]
+    for (const day of week.days) {
+      if (planDateToISO(day.date, week.dates) === today) return i
+    }
+  }
+  return 0
+}
+
 export default function App() {
-  const { athlete } = useAthlete()
-  const { logs, saveLog, syncLogs, loadHistory, latestLoad } = useLogs(
-    SEED_DATE,
-    athlete.ctlBaseline,
-    // ATL seed: same as CTL for stable starting point (TSB ≈ 0)
-    athlete.ctlBaseline,
+  const [tab, setTab] = useState<Tab>('today')
+  const [authed, setAuthed] = useState<boolean | null>(null) // null = checking
+
+  const { syncState, serverData, pushAthlete, pushLogs } = useServerSync()
+
+  const { athlete, updateAthlete, hydrateFromServer: hydrateAthlete } = useAthlete({
+    onPushAthlete: pushAthlete,
+  })
+  const {
+    logs, saveLog, syncLogs, hydrateFromServer: hydrateLogs,
+    loadHistory, latestLoad,
+  } = useLogs(SEED_DATE, athlete.ctlBaseline, athlete.ctlBaseline, {
+    onPushLogs: pushLogs,
+  })
+
+  const { status: stravaStatus, lastSynced, connect, sync } = useStrava(
+    athlete.ftp,
+    syncLogs,
+    (maxHR) => { if (maxHR > athlete.maxHR) updateAthlete({ maxHR }) },
   )
-  const { status: stravaStatus, lastSynced, connect, sync } = useStrava(athlete.ftp, syncLogs)
+
+  // Determine auth state from server sync result
+  useEffect(() => {
+    if (syncState === 'unauthenticated') setAuthed(false)
+    else if (syncState === 'ready' || syncState === 'error') setAuthed(true)
+    // 'loading' → keep null (show nothing / spinner)
+  }, [syncState])
+
+  // Hydrate local state from server on first load
+  useEffect(() => {
+    if (syncState !== 'ready' || !serverData) return
+    if (serverData.athlete) hydrateAthlete(serverData.athlete)
+    if (serverData.logs.length > 0) hydrateLogs(serverData.logs)
+  }, [syncState]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (authed === null) {
+    return <div className="min-h-screen bg-zinc-950" />
+  }
+
+  if (authed === false) {
+    return <LoginScreen onLogin={() => setAuthed(true)} />
+  }
+
+  const activeWeek = currentWeekIndex()
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 pb-16">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {/* Scrollable content area with bottom padding for tab bar */}
+      <div className="max-w-2xl mx-auto p-4 pb-20">
 
         {/* Header */}
         <div className="flex items-start justify-between mb-5">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white" style={{ fontFamily: 'Georgia, serif' }}>
-              LT100 MTB — Training Plan
+            <h1 className="text-xl font-bold tracking-tight text-white" style={{ fontFamily: 'Georgia, serif' }}>
+              AdAstra
             </h1>
-            <p className="text-zinc-500 text-xs mt-1 tracking-wider uppercase">
-              Race Across the Sky · August 15, 2026 · Sub-9 Hour Target
+            <p className="text-zinc-500 text-[10px] mt-0.5 tracking-widest uppercase">
+              Leadville 100 · Aug 15, 2026
             </p>
           </div>
 
-          {/* Strava sync button */}
+          {/* Strava sync */}
           <div className="flex flex-col items-end gap-1 shrink-0 ml-4">
             {stravaStatus === 'not_connected' ? (
               <button
@@ -55,58 +111,74 @@ export default function App() {
             )}
             {lastSynced && (
               <span className="text-[10px] text-zinc-600">
-                Last synced {lastSynced.toLocaleTimeString()}
+                Synced {lastSynced.toLocaleTimeString()}
               </span>
             )}
             {stravaStatus === 'error' && (
-              <span className="text-[10px] text-red-500">Sync failed — try again</span>
+              <span className="text-[10px] text-red-500">Sync failed</span>
             )}
           </div>
         </div>
 
-        {/* Athlete dashboard — live CTL/ATL/TSB */}
-        <AthleteDashboard athlete={athlete} latestLoad={latestLoad} />
-
-        {/* Weekly structure legend */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 mb-4">
-          <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-2">Weekly Structure</div>
-          <div className="text-xs text-zinc-400 leading-relaxed">
-            <span className="text-red-400 font-medium">Mon</span> VO₂ →{' '}
-            <span className="text-purple-400 font-medium">Tue</span> Strength →{' '}
-            <span className="text-zinc-500 font-medium">Wed</span> Rest →{' '}
-            <span className="text-orange-400 font-medium">Thu</span> Threshold →{' '}
-            <span className="text-zinc-500 font-medium">Fri</span> Rest →{' '}
-            <span className="text-blue-400 font-medium">Sat</span> Long Ride →{' '}
-            <span className="text-blue-400 font-medium">Sun</span> Endurance
-          </div>
-        </div>
-
-        {/* Training load chart */}
-        <TrainingLoadChart
-          history={loadHistory}
-          seedCTL={athlete.ctlBaseline}
-          seedDate={SEED_DATE}
-        />
-
-        {/* Weekly TSS summary */}
-        <WeeklyTSSSummary weeks={LEADVILLE_2026.weeks} logs={logs} />
-
-        {/* Training weeks */}
-        {LEADVILLE_2026.weeks.map((week, i) => (
-          <WeekBlock
-            key={week.week}
-            week={week}
-            planId={LEADVILLE_2026.id}
-            defaultOpen={i === 0}
+        {/* Tab content */}
+        {tab === 'today' && (
+          <TodayView
+            athlete={athlete}
+            latestLoad={latestLoad}
             logs={logs}
+            loadHistory={loadHistory}
             athleteFTP={athlete.ftp}
             onSaveLog={saveLog}
           />
-        ))}
+        )}
 
-        <div className="mt-6 text-center text-zinc-600 text-[10px] tracking-wider uppercase">
-          Plan is adaptive — actual execution drives weekly adjustments
-        </div>
+        {tab === 'plan' && (
+          <>
+            {LEADVILLE_2026.weeks.map((week, i) => (
+              <WeekBlock
+                key={week.week}
+                week={week}
+                planId={LEADVILLE_2026.id}
+                defaultOpen={i === activeWeek}
+                logs={logs}
+                athleteFTP={athlete.ftp}
+                onSaveLog={saveLog}
+              />
+            ))}
+            <div className="mt-6 text-center text-zinc-600 text-[10px] tracking-wider uppercase">
+              Plan is adaptive — actual execution drives weekly adjustments
+            </div>
+          </>
+        )}
+
+        {tab === 'fitness' && (
+          <>
+            <AthleteDashboard athlete={athlete} latestLoad={latestLoad} />
+            <TrainingLoadChart
+              history={loadHistory}
+              seedCTL={athlete.ctlBaseline}
+              seedDate={SEED_DATE}
+            />
+            <WeeklyTSSSummary weeks={LEADVILLE_2026.weeks} logs={logs} />
+          </>
+        )}
+      </div>
+
+      {/* Bottom tab bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 flex z-10">
+        {(['today', 'plan', 'fitness'] as Tab[]).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 py-3 text-xs uppercase tracking-widest font-medium transition-colors
+              ${tab === t
+                ? 'text-white border-t-2 border-blue-500'
+                : 'text-zinc-500 hover:text-zinc-300 border-t-2 border-transparent'
+              }`}
+          >
+            {t}
+          </button>
+        ))}
       </div>
     </div>
   )
