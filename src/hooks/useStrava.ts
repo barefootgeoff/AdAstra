@@ -3,7 +3,11 @@ import type { WorkoutLog } from '../models/log'
 
 type SyncStatus = 'idle' | 'syncing' | 'done' | 'error' | 'not_connected'
 
-export function useStrava(ftp: number, onSync: (logs: WorkoutLog[]) => void) {
+export function useStrava(
+  ftp: number,
+  onSync: (logs: WorkoutLog[]) => void,
+  onUpdateMaxHR?: (maxHR: number) => void,
+) {
   const [status, setStatus] = useState<SyncStatus>('idle')
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
 
@@ -48,6 +52,10 @@ export function useStrava(ftp: number, onSync: (logs: WorkoutLog[]) => void) {
       }
       const { logs } = await res.json() as { logs: WorkoutLog[] }
       onSync(logs)
+      if (onUpdateMaxHR) {
+        const maxSeen = logs.reduce((m, l) => Math.max(m, l.peakHR ?? 0), 0)
+        if (maxSeen > 0) onUpdateMaxHR(maxSeen)
+      }
       setLastSynced(new Date())
       setStatus('done')
     } catch {
