@@ -28,6 +28,7 @@ interface TrainingContext {
     notes?: string
   }
   recentLoad: Array<{ date: string; ctl: number; atl: number; tsb: number; dailyTSS: number }>
+  intervals?: Array<{ index: number; durationSec: number; avgWatts: number; maxWatts: number; avgHR?: number; tss: number }>
 }
 
 function buildSystemPrompt(ctx: TrainingContext): string {
@@ -53,6 +54,14 @@ What actually happened:
 - Avg HR: ${actual.avgHR ?? '—'}bpm, Peak HR: ${actual.peakHR ?? '—'}bpm
 - TSS: ${actual.actualTSS ?? '—'}, RPE: ${actual.rpe ?? '—'}/10
 - Notes: ${actual.notes ?? 'none'}
+
+Interval breakdown from power data:
+${ctx.intervals && ctx.intervals.length > 0
+  ? ctx.intervals.map(iv => {
+      const dur = `${Math.floor(iv.durationSec / 60)}:${String(iv.durationSec % 60).padStart(2, '0')}`
+      return `  #${iv.index}: ${dur}, avg ${iv.avgWatts}W (${Math.round(iv.avgWatts / athlete.ftp * 100)}% FTP)${iv.avgHR ? `, HR ${iv.avgHR}bpm` : ''}`
+    }).join('\n')
+  : '  No interval data available'}
 
 Be concise (2–4 sentences), specific to the numbers, and direct. Speak to ${athlete.name} by name occasionally. Do not recite all the data back — use it to coach.`
 }

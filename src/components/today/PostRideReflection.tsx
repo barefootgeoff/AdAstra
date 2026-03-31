@@ -3,6 +3,7 @@ import type { AthleteProfile } from '../../models/athlete'
 import type { PlannedSession } from '../../models/training'
 import type { WorkoutLog } from '../../models/log'
 import type { TrainingLoad } from '../../models/load'
+import type { Interval } from '../../models/interval'
 import { useChat } from '../../store/useChat'
 
 const OPENERS = [
@@ -16,9 +17,10 @@ interface Props {
   plannedSession: PlannedSession
   log: WorkoutLog
   loadHistory: TrainingLoad[]
+  intervals: Interval[]
 }
 
-export function PostRideReflection({ athlete, plannedSession, log, loadHistory }: Props) {
+export function PostRideReflection({ athlete, plannedSession, log, loadHistory, intervals }: Props) {
   const { messages, addMessage } = useChat(log.id)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -68,6 +70,14 @@ export function PostRideReflection({ athlete, plannedSession, log, loadHistory }
         },
         recentLoad: loadHistory.slice(-7).map(l => ({
           date: l.date, ctl: l.ctl, atl: l.atl, tsb: l.tsb, dailyTSS: l.dailyTSS,
+        })),
+        intervals: intervals.map(iv => ({
+          index: iv.index,
+          durationSec: iv.durationSec,
+          avgWatts: iv.avgWatts,
+          maxWatts: iv.maxWatts,
+          avgHR: iv.avgHR,
+          tss: iv.tss,
         })),
       }
 
