@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { AthleteProfile } from '../../models/athlete'
 import type { TrainingLoad } from '../../models/load'
 import type { WorkoutLog } from '../../models/log'
 import type { PlannedSession, WorkoutType } from '../../models/training'
+import type { Interval } from '../../models/interval'
 import { WorkoutLogger } from '../plan/WorkoutLogger'
 import { PostRideReflection } from './PostRideReflection'
 import { LEADVILLE_2026 } from '../../data/leadville2026'
@@ -46,9 +47,15 @@ function findTodaySession(): { session: PlannedSession; weekNum: number } | null
 }
 
 function formatDate(isoDate: string): string {
-  return new Date(isoDate + 'T00:00:00').toLocaleDateString('en-US', {
+  return new Date(isoDate + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   })
+}
+
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = String(sec % 60).padStart(2, '0')
+  return `${m}:${s}`
 }
 
 interface Props {
@@ -63,6 +70,8 @@ interface Props {
 export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, onSaveLog }: Props) {
   const [logging, setLogging] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [intervals, setIntervals] = useState<Interval[] | null>(null)
+  const [intervalsLoading, setIntervalsLoading] = useState(false)
 
   const today = todayISO()
   const found = findTodaySession()
@@ -70,7 +79,19 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
   const primaryGoal = athlete.goals[0]
   const daysToRace = primaryGoal ? daysUntil(primaryGoal.date) : null
 
-  // ── No session in plan for today ───────────────────────────────────────────
+  // Fetch power stream intervals for completed Strava activities
+  useEffect(() => {
+    if (!todayLog?.completed || !todayLog.id.startsWith('strava-')) return
+    const activityId = todayLog.id.replace('strava-', '')
+    setIntervalsLoading(true)
+    fetch(`/api/strava/streams?activityId=${activityId}&ftp=${athleteFTP}`)
+      .then(r => r.ok ? r.json() : { intervals: [] })
+      .then((data: { intervals: Interval[] }) => setIntervals(data.intervals))
+      .catch(() => setIntervals([]))
+      .finally(() => setIntervalsLoading(false))
+  }, [todayLog?.id, todayLog?.completed, athleteFTP])
+
+  // ── No session in plan for today ─────────────────────────────────────────────
   if (!found) {
     return (
       <div className="text-center py-16">
@@ -88,27 +109,19 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
   const { session, weekNum } = found
   const isRest = session.type === 'rest'
   const badge = TYPE_BADGE[session.type]
-  const plannedTSS = session.tss ? parseInt(session.tss.replace(/[^0-9]/g, ''), 10) : null
 
-  // ── POST-COMPLETION ────────────────────────────────────────────────────────
+  // ── POST-COMPLETION ──────────────────────────────────────────────────────────
   if (todayLog?.completed) {
-    const tss = todayLog.actualTSS
-    const tssDiff = tss && plannedTSS ? tss - plannedTSS : null
-
     return (
       <div>
-        {/* Date + race countdown */}
-        <div className="flex items-center justify-between mb-4">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-3">
           <div>
-            <div className="text-zinc-400 text-sm">{formatDate(today)}</div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`${badge.badge} text-[10px] font-bold px-2 py-0.5 rounded tracking-wider`}>
-                {badge.label}
-              </span>
-              <span className="bg-green-900/60 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded tracking-wider">
-                DONE
-              </span>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="bg-green-900/60 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded tracking-wider">✓ DONE</span>
+              <span className={`${badge.badge} text-[10px] font-bold px-2 py-0.5 rounded tracking-wider`}>{badge.label}</span>
             </div>
+            <div className="text-zinc-400 text-xs">{formatDate(today)}</div>
           </div>
           {daysToRace !== null && (
             <div className="text-right">
@@ -118,50 +131,54 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
           )}
         </div>
 
-        <div className="text-white text-lg font-medium mb-4">{session.label}</div>
+        <div className="text-white text-lg font-medium mb-3">{session.label}</div>
 
-        {/* Actual vs planned */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-2">
-          <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-3">Actual vs Planned</div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-            {todayLog.durationMinutes != null && (
-              <Metric
-                label="Duration"
-                actual={`${todayLog.durationMinutes}min`}
-                planned={session.duration}
-              />
-            )}
-            {todayLog.normalizedWatts != null && (
-              <Metric label="NP" actual={`${todayLog.normalizedWatts}W`} />
-            )}
-            {tss != null && (
-              <Metric
-                label="TSS"
-                actual={String(tss)}
-                planned={plannedTSS ? `~${plannedTSS}` : undefined}
-                diff={tssDiff}
-              />
-            )}
-            {todayLog.avgHR != null && (
-              <Metric label="Avg HR" actual={`${todayLog.avgHR}bpm`} />
-            )}
-            {todayLog.peakHR != null && (
-              <Metric label="Peak HR" actual={`${todayLog.peakHR}bpm`} />
-            )}
-            {todayLog.rpe != null && (
-              <Metric label="RPE" actual={`${todayLog.rpe}/10`} />
-            )}
-          </div>
-          {todayLog.notes && (
-            <div className="mt-3 text-xs text-zinc-400 italic">{todayLog.notes}</div>
+        {/* Key metrics row */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          {todayLog.actualTSS != null && (
+            <MetricPill label="TSS" value={String(todayLog.actualTSS)} />
+          )}
+          {todayLog.normalizedWatts != null && (
+            <MetricPill label="NP" value={`${todayLog.normalizedWatts}W`} />
+          )}
+          {todayLog.durationMinutes != null && (
+            <MetricPill label="Time" value={`${todayLog.durationMinutes}min`} />
+          )}
+          {todayLog.avgHR != null && (
+            <MetricPill label="HR" value={`${todayLog.avgHR}bpm`} />
+          )}
+          {todayLog.rpe != null && (
+            <MetricPill label="RPE" value={`${todayLog.rpe}/10`} />
           )}
           <button
             onClick={() => setLogging(true)}
-            className="mt-3 text-[10px] text-zinc-500 hover:text-zinc-300 underline"
+            className="text-[10px] text-zinc-500 hover:text-zinc-300 ml-auto underline"
           >
-            Edit log
+            Edit
           </button>
         </div>
+
+        {/* Interval analysis */}
+        {(intervalsLoading || (intervals && intervals.length > 0)) && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-4">
+            <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-3">Intervals</div>
+            {intervalsLoading ? (
+              <div className="text-zinc-600 text-xs">Analyzing power data…</div>
+            ) : (
+              <div className="space-y-2">
+                {intervals!.map(iv => (
+                  <div key={iv.index} className="flex items-center gap-3 text-xs font-mono">
+                    <span className="text-zinc-600 w-5">#{iv.index}</span>
+                    <span className="text-zinc-400 w-10">{formatDuration(iv.durationSec)}</span>
+                    <span className="text-zinc-200">{iv.avgWatts}W</span>
+                    {iv.avgHR && <span className="text-zinc-500">{iv.avgHR}bpm</span>}
+                    <span className="text-zinc-700 ml-auto">{iv.tss} TSS</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* AI coach chat */}
         <PostRideReflection
@@ -169,6 +186,7 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
           plannedSession={session}
           log={todayLog}
           loadHistory={loadHistory}
+          intervals={intervals ?? []}
         />
 
         {logging && (
@@ -186,7 +204,7 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
     )
   }
 
-  // ── PRE-COMPLETION ─────────────────────────────────────────────────────────
+  // ── PRE-COMPLETION ───────────────────────────────────────────────────────────
   return (
     <div>
       {/* Date + race countdown */}
@@ -293,14 +311,12 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
         </div>
       )}
 
-      {/* Skipped indicator */}
       {todayLog?.skipped && (
         <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-2 mb-4 text-zinc-500 text-sm">
           Marked as skipped.
         </div>
       )}
 
-      {/* Log button */}
       {!isRest && (
         <button
           onClick={() => setLogging(true)}
@@ -325,30 +341,11 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
   )
 }
 
-// Small helper for actual vs planned comparison rows
-function Metric({
-  label,
-  actual,
-  planned,
-  diff,
-}: {
-  label: string
-  actual: string
-  planned?: string
-  diff?: number | null
-}) {
+function MetricPill({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">{label}</div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="font-mono text-zinc-200">{actual}</span>
-        {planned && <span className="text-zinc-600 text-xs">/ {planned}</span>}
-        {diff != null && (
-          <span className={`text-[10px] font-mono ${diff > 0 ? 'text-green-500' : diff < 0 ? 'text-red-400' : 'text-zinc-500'}`}>
-            {diff > 0 ? `+${diff}` : diff}
-          </span>
-        )}
-      </div>
+    <div className="bg-zinc-800 rounded-lg px-3 py-1.5 flex flex-col items-center min-w-[52px]">
+      <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>
+      <span className="text-zinc-200 font-mono text-sm font-medium">{value}</span>
     </div>
   )
 }

@@ -12,12 +12,12 @@ import { LoginScreen } from './components/LoginScreen'
 import { TodayView } from './components/today/TodayView'
 import { planDateToISO, todayISO } from './utils/dateHelpers'
 
-// The seed date is the day before Week 11 starts — baseline state
 const SEED_DATE = '2026-03-15'
 
 type Tab = 'today' | 'plan' | 'fitness'
 
-// Find the index of the week that contains today, for auto-open
+const TAB_LABELS: Record<Tab, string> = { today: 'Today', plan: 'Plan', fitness: 'Fitness' }
+
 function currentWeekIndex(): number {
   const today = todayISO()
   for (let i = 0; i < LEADVILLE_2026.weeks.length; i++) {
@@ -31,7 +31,8 @@ function currentWeekIndex(): number {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
-  const [authed, setAuthed] = useState<boolean | null>(null) // null = checking
+  const [fabOpen, setFabOpen] = useState(false)
+  const [authed, setAuthed] = useState<boolean | null>(null)
 
   const { syncState, serverData, pushAthlete, pushLogs } = useServerSync()
 
@@ -49,39 +50,36 @@ export default function App() {
     athlete.ftp,
     syncLogs,
     (maxHR) => { if (maxHR > athlete.maxHR) updateAthlete({ maxHR }) },
+    authed === true, // auto-sync once authenticated
   )
 
-  // Determine auth state from server sync result
   useEffect(() => {
     if (syncState === 'unauthenticated') setAuthed(false)
     else if (syncState === 'ready' || syncState === 'error') setAuthed(true)
-    // 'loading' → keep null (show nothing / spinner)
   }, [syncState])
 
-  // Hydrate local state from server on first load
   useEffect(() => {
     if (syncState !== 'ready' || !serverData) return
     if (serverData.athlete) hydrateAthlete(serverData.athlete)
     if (serverData.logs.length > 0) hydrateLogs(serverData.logs)
   }, [syncState]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (authed === null) {
-    return <div className="min-h-screen bg-zinc-950" />
-  }
-
-  if (authed === false) {
-    return <LoginScreen onLogin={() => setAuthed(true)} />
-  }
+  if (authed === null) return <div className="min-h-screen bg-zinc-950" />
+  if (authed === false) return <LoginScreen onLogin={() => setAuthed(true)} />
 
   const activeWeek = currentWeekIndex()
 
+  function switchTab(t: Tab) {
+    setTab(t)
+    setFabOpen(false)
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Scrollable content area with bottom padding for tab bar */}
-      <div className="max-w-2xl mx-auto p-4 pb-20">
+      <div className="max-w-2xl mx-auto p-4 pb-24">
 
         {/* Header */}
-        <div className="flex items-start justify-between mb-5">
+        <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-white" style={{ fontFamily: 'Georgia, serif' }}>
               AdAstra
@@ -91,33 +89,13 @@ export default function App() {
             </p>
           </div>
 
-          {/* Strava sync */}
-          <div className="flex flex-col items-end gap-1 shrink-0 ml-4">
-            {stravaStatus === 'not_connected' ? (
-              <button
-                onClick={connect}
-                className="text-xs bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded font-medium transition-colors"
-              >
-                Connect Strava
-              </button>
-            ) : (
-              <button
-                onClick={sync}
-                disabled={stravaStatus === 'syncing'}
-                className="text-xs bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 px-3 py-1.5 rounded font-medium transition-colors"
-              >
-                {stravaStatus === 'syncing' ? 'Syncing…' : 'Sync Strava'}
-              </button>
-            )}
-            {lastSynced && (
-              <span className="text-[10px] text-zinc-600">
-                Synced {lastSynced.toLocaleTimeString()}
-              </span>
-            )}
-            {stravaStatus === 'error' && (
-              <span className="text-[10px] text-red-500">Sync failed</span>
-            )}
-          </div>
+          {/* Compact Strava status */}
+          <StravaIndicator
+            status={stravaStatus}
+            lastSynced={lastSynced}
+            onConnect={connect}
+            onSync={sync}
+          />
         </div>
 
         {/* Tab content */}
@@ -164,22 +142,110 @@ export default function App() {
         )}
       </div>
 
-      {/* Bottom tab bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 flex z-10">
-        {(['today', 'plan', 'fitness'] as Tab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-1 py-3 text-xs uppercase tracking-widest font-medium transition-colors
-              ${tab === t
-                ? 'text-white border-t-2 border-blue-500'
-                : 'text-zinc-500 hover:text-zinc-300 border-t-2 border-transparent'
-              }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      {/* FAB navigation */}
+      {fabOpen && (
+        // Backdrop — tap to close
+        <div
+          className="fixed inset-0 z-10"
+          onClick={() => setFabOpen(false)}
+        />
+      )}
+
+      {/* Pills — visible when open */}
+      {fabOpen && (
+        <div className="fixed bottom-24 right-6 z-20 flex flex-col gap-2 items-end">
+          {(['fitness', 'plan', 'today'] as Tab[]).map(t => (
+            <button
+              key={t}
+              onClick={() => switchTab(t)}
+              className={`rounded-full px-5 py-2 text-sm font-medium shadow-lg transition-all
+                ${tab === t
+                  ? 'bg-zinc-700 border-2 border-blue-500 text-white'
+                  : 'bg-zinc-800 border border-zinc-600 text-zinc-300 hover:bg-zinc-700'
+                }`}
+            >
+              {TAB_LABELS[t]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* FAB circle */}
+      <button
+        onClick={() => setFabOpen(!fabOpen)}
+        className={`fixed bottom-6 right-6 z-20 w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-200
+          ${fabOpen
+            ? 'bg-zinc-700 border-2 border-zinc-500 rotate-45'
+            : 'bg-zinc-800 border border-zinc-600'
+          }`}
+        aria-label="Navigation"
+      >
+        {fabOpen ? (
+          <span className="text-zinc-200 text-xl font-light">+</span>
+        ) : (
+          <span className="text-zinc-300 text-xs font-bold uppercase tracking-wider">
+            {tab[0].toUpperCase()}
+          </span>
+        )}
+      </button>
     </div>
+  )
+}
+
+// ─── Compact Strava status indicator ─────────────────────────────────────────
+
+function StravaIndicator({
+  status,
+  lastSynced,
+  onConnect,
+  onSync,
+}: {
+  status: string
+  lastSynced: Date | null
+  onConnect: () => void
+  onSync: () => void
+}) {
+  if (status === 'not_connected') {
+    return (
+      <button onClick={onConnect} className="flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300">
+        <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+        Connect Strava
+      </button>
+    )
+  }
+
+  if (status === 'syncing') {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+        <span className="w-2 h-2 rounded-full bg-zinc-500 shrink-0 animate-pulse" />
+        Syncing…
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <button onClick={onSync} className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300">
+        <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+        Sync failed — retry
+      </button>
+    )
+  }
+
+  if (status === 'done' && lastSynced) {
+    return (
+      <button onClick={onSync} className="flex items-center gap-1.5 text-xs text-green-500 hover:text-green-400">
+        <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+        Synced {lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </button>
+    )
+  }
+
+  // idle — show nothing meaningful, Strava connected but not yet synced this session
+  return (
+    <button onClick={onSync} className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-zinc-400">
+      <span className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />
+      Strava
+    </button>
   )
 }

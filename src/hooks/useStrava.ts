@@ -7,16 +7,16 @@ export function useStrava(
   ftp: number,
   onSync: (logs: WorkoutLog[]) => void,
   onUpdateMaxHR?: (maxHR: number) => void,
+  autoSync = false,
 ) {
   const [status, setStatus] = useState<SyncStatus>('idle')
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
 
-  // Check URL for Strava OAuth result on mount
+  // Handle OAuth return params on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const stravaParam = params.get('strava')
     if (stravaParam) {
-      // Clean the param from the URL
       params.delete('strava')
       const newUrl = params.size > 0
         ? `${window.location.pathname}?${params}`
@@ -33,6 +33,13 @@ export function useStrava(
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Auto-sync once when enabled (triggered after app auth completes)
+  useEffect(() => {
+    if (!autoSync) return
+    sync()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSync])
 
   function connect() {
     window.location.href = '/api/auth/strava'
