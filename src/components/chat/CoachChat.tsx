@@ -181,14 +181,9 @@ export function CoachChat({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-[10%] z-50 bg-zinc-950 border-t border-zinc-800 rounded-t-2xl flex flex-col shadow-2xl">
-      {/* Drag handle */}
-      <div className="flex justify-center pt-2.5 pb-1 shrink-0">
-        <div className="w-8 h-1 rounded-full bg-zinc-700" />
-      </div>
-
+    <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col animate-slide-up">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-blue-300 text-sm leading-none">✦</span>
           <span className="text-sm font-semibold text-zinc-100 tracking-wide">Coach</span>
