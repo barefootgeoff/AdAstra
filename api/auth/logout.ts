@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { clearSessionCookie } from '../_session'
+import { clearSessionCookie } from '../_session.js'
 
 export default function handler(_req: VercelRequest, res: VercelResponse) {
   clearSessionCookie(res)
