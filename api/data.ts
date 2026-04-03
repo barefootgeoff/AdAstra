@@ -1,6 +1,6 @@
 import { kv } from '@vercel/kv'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { requireAuth } from './_session'
+import { requireAuth } from './_session.js'
 import type { AthleteProfile } from '../src/models/athlete'
 import type { WorkoutLog } from '../src/models/log'
 

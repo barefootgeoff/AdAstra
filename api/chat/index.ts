@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { requireAuth } from '../_session'
+import { requireAuth } from '../_session.js'
 import type { ChatMessage } from '../../src/models/chat'
 
 interface TrainingContext {
