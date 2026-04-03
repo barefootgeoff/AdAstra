@@ -106,6 +106,7 @@ export default function App() {
   }
 
   return (
+    <>
     <div className={`min-h-screen bg-zinc-950 text-zinc-100 transition-[filter] duration-200 ${coachChatOpen ? 'blur-sm' : ''}`}>
       <div className="max-w-2xl mx-auto p-4 pb-10">
 
@@ -229,34 +230,36 @@ export default function App() {
         </nav>
       </div>
 
-      {/* Coach FAB */}
-      {!coachChatOpen && (
-        <button
-          onClick={openCoach}
-          aria-label="Open Coach"
-          className="fixed bottom-6 right-5 z-40 flex items-center gap-2 px-4 py-3 rounded-2xl bg-zinc-800 border border-zinc-700 shadow-lg hover:bg-zinc-700 active:scale-95 transition-all duration-150"
-        >
-          <span className="text-blue-300 text-base leading-none">✦</span>
-          <span className="text-sm font-medium text-zinc-200 tracking-wide">Coach</span>
-        </button>
-      )}
-
-      {/* Coach Chat overlay */}
-      {coachChatOpen && (
-        <CoachChat
-          athlete={athlete}
-          latestLoad={latestLoad}
-          loadHistory={loadHistory}
-          logs={logs}
-          plan={plan}
-          activeTab={tab}
-          todayContext={todayContext}
-          onClose={() => setCoachChatOpen(false)}
-          onUpdateBriefing={(text) => updateAthlete({ coachBriefing: text })}
-          onApplyPlanEdits={applyPlanEdits}
-        />
-      )}
     </div>
+
+    {/* Coach FAB — outside blur wrapper */}
+    {!coachChatOpen && (
+      <button
+        onClick={openCoach}
+        aria-label="Open Coach"
+        className="fixed bottom-6 right-5 z-40 flex items-center gap-2 px-4 py-3 rounded-2xl bg-zinc-800 border border-zinc-700 shadow-lg hover:bg-zinc-700 active:scale-95 transition-all duration-150"
+      >
+        <span className="text-blue-300 text-base leading-none">✦</span>
+        <span className="text-sm font-medium text-zinc-200 tracking-wide">Coach</span>
+      </button>
+    )}
+
+    {/* Coach Chat overlay — outside blur wrapper */}
+    {coachChatOpen && (
+      <CoachChat
+        athlete={athlete}
+        latestLoad={latestLoad}
+        loadHistory={loadHistory}
+        logs={logs}
+        plan={plan}
+        activeTab={tab}
+        todayContext={todayContext}
+        onClose={() => setCoachChatOpen(false)}
+        onUpdateBriefing={(text) => updateAthlete({ coachBriefing: text })}
+        onApplyPlanEdits={applyPlanEdits}
+      />
+    )}
+    </>
   )
 }
 
