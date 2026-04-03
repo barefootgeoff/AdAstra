@@ -73,5 +73,5 @@ export function usePlan({ onPushOverrides }: Callbacks = {}) {
 
   const plan = applyOverrides(overrides)
 
-  return { plan, applyPlanEdits, hydrateFromServer }
+  return { plan, overrides, applyPlanEdits, hydrateFromServer }
 }

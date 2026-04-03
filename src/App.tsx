@@ -46,7 +46,7 @@ export default function App() {
 
   const { syncState, serverData, pushAthlete, pushLogs, pushPlanOverrides } = useServerSync()
   const { achievements, addAchievements } = useAchievements()
-  const { plan, applyPlanEdits, hydrateFromServer: hydratePlan } = usePlan({
+  const { plan, overrides, applyPlanEdits, hydrateFromServer: hydratePlan } = usePlan({
     onPushOverrides: pushPlanOverrides,
   })
 
@@ -76,7 +76,12 @@ export default function App() {
     if (syncState !== 'ready' || !serverData) return
     if (serverData.athlete) hydrateAthlete(serverData.athlete)
     if (serverData.logs.length > 0) hydrateLogs(serverData.logs)
-    if (serverData.planOverrides.length > 0) hydratePlan(serverData.planOverrides)
+    if (serverData.planOverrides.length > 0) {
+      hydratePlan(serverData.planOverrides)
+    } else if (overrides.length > 0) {
+      // Bootstrap: server has no overrides yet — push local ones up so all devices sync
+      pushPlanOverrides(overrides)
+    }
   }, [syncState]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (authed === null) return <div className="min-h-screen bg-zinc-950" />

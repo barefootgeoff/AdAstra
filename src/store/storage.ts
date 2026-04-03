@@ -1,12 +1,10 @@
 import type { AthleteProfile } from '../models/athlete'
 import type { WorkoutLog } from '../models/log'
-import type { TrainingPlan } from '../models/training'
 import type { Achievement } from '../models/achievement'
 
 const KEYS = {
   ATHLETE: 'adastra:athlete',
   LOGS: 'adastra:logs',
-  PLANS: 'adastra:plans',
   ACHIEVEMENTS: 'adastra:achievements',
 } as const
 
@@ -77,23 +75,3 @@ export function addAchievements(incoming: Achievement[]): void {
   localStorage.setItem(KEYS.ACHIEVEMENTS, JSON.stringify([...byId.values()]))
 }
 
-// ─── Training plans ───────────────────────────────────────────────────────────
-export function getTrainingPlans(): TrainingPlan[] {
-  try {
-    const raw = localStorage.getItem(KEYS.PLANS)
-    return raw ? (JSON.parse(raw) as TrainingPlan[]) : []
-  } catch {
-    return []
-  }
-}
-
-export function saveTrainingPlan(plan: TrainingPlan): void {
-  const plans = getTrainingPlans()
-  const idx = plans.findIndex(p => p.id === plan.id)
-  if (idx >= 0) {
-    plans[idx] = plan
-  } else {
-    plans.push(plan)
-  }
-  localStorage.setItem(KEYS.PLANS, JSON.stringify(plans))
-}
