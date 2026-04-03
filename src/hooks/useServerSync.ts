@@ -7,6 +7,7 @@ type SyncState = 'loading' | 'ready' | 'unauthenticated' | 'error'
 interface ServerData {
   athlete: AthleteProfile | null
   logs: WorkoutLog[]
+  planOverrides: object[]
   stravaConnected: boolean
 }
 
@@ -15,6 +16,7 @@ interface UseServerSyncResult {
   serverData: ServerData | null
   pushAthlete: (athlete: AthleteProfile) => void
   pushLogs: (logs: WorkoutLog[]) => void
+  pushPlanOverrides: (overrides: object[]) => void
 }
 
 export function useServerSync(): UseServerSyncResult {
@@ -56,5 +58,13 @@ export function useServerSync(): UseServerSyncResult {
     }).catch(console.error)
   }
 
-  return { syncState, serverData, pushAthlete, pushLogs }
+  function pushPlanOverrides(overrides: object[]) {
+    fetch('/api/data?resource=plan-overrides', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(overrides),
+    }).catch(console.error)
+  }
+
+  return { syncState, serverData, pushAthlete, pushLogs, pushPlanOverrides }
 }

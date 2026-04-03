@@ -39,8 +39,18 @@ function applyOverrides(overrides: SessionOverride[]): TrainingPlan {
   }
 }
 
-export function usePlan() {
+interface Callbacks {
+  onPushOverrides?: (overrides: SessionOverride[]) => void
+}
+
+export function usePlan({ onPushOverrides }: Callbacks = {}) {
   const [overrides, setOverrides] = useState<SessionOverride[]>(loadOverrides)
+
+  const hydrateFromServer = useCallback((serverOverrides: unknown[]) => {
+    const parsed = serverOverrides as SessionOverride[]
+    saveOverrides(parsed)
+    setOverrides(parsed)
+  }, [])
 
   const applyPlanEdits = useCallback((edits: PlanEditProposal[]) => {
     setOverrides(prev => {
@@ -56,11 +66,12 @@ export function usePlan() {
         }
       }
       saveOverrides(next)
+      onPushOverrides?.(next)
       return next
     })
-  }, [])
+  }, [onPushOverrides])
 
   const plan = applyOverrides(overrides)
 
-  return { plan, applyPlanEdits }
+  return { plan, applyPlanEdits, hydrateFromServer }
 }

@@ -44,9 +44,11 @@ export default function App() {
   const [coachChatOpen, setCoachChatOpen] = useState(false)
   const [authed, setAuthed] = useState<boolean | null>(null)
 
-  const { plan, applyPlanEdits } = usePlan()
+  const { syncState, serverData, pushAthlete, pushLogs, pushPlanOverrides } = useServerSync()
   const { achievements, addAchievements } = useAchievements()
-  const { syncState, serverData, pushAthlete, pushLogs } = useServerSync()
+  const { plan, applyPlanEdits, hydrateFromServer: hydratePlan } = usePlan({
+    onPushOverrides: pushPlanOverrides,
+  })
 
   const { athlete, updateAthlete, hydrateFromServer: hydrateAthlete } = useAthlete({
     onPushAthlete: pushAthlete,
@@ -74,6 +76,7 @@ export default function App() {
     if (syncState !== 'ready' || !serverData) return
     if (serverData.athlete) hydrateAthlete(serverData.athlete)
     if (serverData.logs.length > 0) hydrateLogs(serverData.logs)
+    if (serverData.planOverrides.length > 0) hydratePlan(serverData.planOverrides)
   }, [syncState]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (authed === null) return <div className="min-h-screen bg-zinc-950" />

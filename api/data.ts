@@ -8,17 +8,19 @@ import type { WorkoutLog } from '../src/models/log'
 const KEYS = {
   ATHLETE: 'athlete',
   LOGS: 'logs',
+  PLAN_OVERRIDES: 'plan-overrides',
 } as const
 
 // ─── GET /api/data ─────────────────────────────────────────────────────────
-// Returns { athlete, logs }
+// Returns { athlete, logs, planOverrides, stravaConnected }
 async function handleGet(res: VercelResponse) {
-  const [athlete, logs, stravaConnected] = await Promise.all([
+  const [athlete, logs, planOverrides, stravaConnected] = await Promise.all([
     kv.get<AthleteProfile>(KEYS.ATHLETE),
     kv.get<WorkoutLog[]>(KEYS.LOGS),
+    kv.get<object[]>(KEYS.PLAN_OVERRIDES),
     isStravaConnected(),
   ])
-  res.status(200).json({ athlete: athlete ?? null, logs: logs ?? [], stravaConnected })
+  res.status(200).json({ athlete: athlete ?? null, logs: logs ?? [], planOverrides: planOverrides ?? [], stravaConnected })
 }
 
 // ─── PUT /api/data?resource=athlete ────────────────────────────────────────
@@ -58,6 +60,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const resource = req.query.resource as string
       if (resource === 'athlete') await handlePutAthlete(req, res)
       else if (resource === 'logs') await handlePutLogs(req, res)
+      else if (resource === 'plan-overrides') {
+        const overrides = req.body
+        if (!Array.isArray(overrides)) { res.status(400).json({ error: 'expected_array' }); return }
+        await kv.set(KEYS.PLAN_OVERRIDES, overrides)
+        res.status(200).json({ ok: true })
+      }
       else res.status(400).json({ error: 'unknown_resource' })
     } else {
       res.status(405).end()
