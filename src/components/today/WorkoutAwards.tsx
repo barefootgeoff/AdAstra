@@ -6,10 +6,11 @@ import type { WorkoutType } from '../../models/training'
 interface Props {
   log: WorkoutLog
   achievements: Achievement[]
+  sessionType?: WorkoutType   // planned session type; overrides auto-classified log type for quote
 }
 
-export function WorkoutAwards({ log, achievements }: Props) {
-  const quote = getQuote(log.type as WorkoutType, log.date)
+export function WorkoutAwards({ log, achievements, sessionType }: Props) {
+  const quote = getQuote(sessionType ?? (log.type as WorkoutType), log.date)
   const earned = achievements.filter(a => a.logId === log.id)
 
   return (

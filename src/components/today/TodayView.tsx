@@ -162,7 +162,7 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
         </div>
 
         {/* Quote + awards */}
-        <WorkoutAwards log={todayLog} achievements={achievements} />
+        <WorkoutAwards log={todayLog} achievements={achievements} sessionType={session.type} />
 
         {/* Interval analysis */}
         {(intervalsLoading || (intervals && intervals.length > 0)) && (

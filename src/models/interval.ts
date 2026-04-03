@@ -3,7 +3,7 @@ export interface Interval {
   startSec: number
   durationSec: number
   avgWatts: number
-  maxWatts: number
+  maxWatts?: number
   avgHR?: number
   tss: number
 }

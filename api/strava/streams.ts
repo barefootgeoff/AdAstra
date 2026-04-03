@@ -2,21 +2,28 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../_session.js'
 import type { Interval } from '../../src/models/interval'
 
-// ─── Strava stream types ──────────────────────────────────────────────────────
+// ─── Strava types ─────────────────────────────────────────────────────────────
+
+interface StravaLap {
+  lap_index: number
+  moving_time: number
+  elapsed_time: number
+  average_watts?: number
+  average_heartrate?: number
+  max_heartrate?: number
+  start_index: number   // index into activity stream
+}
 
 interface StreamData {
   data: (number | null)[]
-  series_type: string
-  resolution: string
 }
 
 interface Streams {
   watts?: StreamData
   heartrate?: StreamData
-  time?: StreamData
 }
 
-// ─── Cookie helpers (duplicated from activities.ts for isolation) ─────────────
+// ─── Token helper ─────────────────────────────────────────────────────────────
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {}
@@ -60,7 +67,34 @@ async function getAccessToken(req: VercelRequest, res: VercelResponse): Promise<
   return accessToken
 }
 
-// ─── Interval detection ───────────────────────────────────────────────────────
+// ─── TSS calculation ──────────────────────────────────────────────────────────
+
+function calcTSS(durationSec: number, avgWatts: number, ftp: number): number {
+  if (ftp <= 0 || avgWatts <= 0 || durationSec <= 0) return 0
+  const IF = avgWatts / ftp
+  return Math.round((durationSec * avgWatts * IF) / (ftp * 3600) * 100)
+}
+
+// ─── Laps → Intervals ─────────────────────────────────────────────────────────
+
+function lapsToIntervals(laps: StravaLap[], ftp: number): Interval[] {
+  let cumulativeSec = 0
+  return laps.map((lap, i) => {
+    const avgWatts = lap.average_watts ? Math.round(lap.average_watts) : 0
+    const startSec = cumulativeSec
+    cumulativeSec += lap.moving_time
+    return {
+      index: i + 1,
+      startSec,
+      durationSec: lap.moving_time,
+      avgWatts,
+      avgHR: lap.average_heartrate ? Math.round(lap.average_heartrate) : undefined,
+      tss: calcTSS(lap.moving_time, avgWatts, ftp),
+    }
+  })
+}
+
+// ─── Power stream fallback ────────────────────────────────────────────────────
 
 function rollingAvg(data: number[], windowSec: number): number[] {
   const half = Math.floor(windowSec / 2)
@@ -72,7 +106,7 @@ function rollingAvg(data: number[], windowSec: number): number[] {
   })
 }
 
-function detectIntervals(
+function detectIntervalsFromStream(
   watts: (number | null)[],
   heartrate: (number | null)[] | undefined,
   ftp: number,
@@ -81,7 +115,6 @@ function detectIntervals(
   const cleanWatts = watts.map(w => w ?? 0)
   const smoothed = rollingAvg(cleanWatts, 30)
 
-  // Find contiguous segments above threshold
   type Segment = { start: number; end: number }
   const segments: Segment[] = []
   let inSeg = false
@@ -98,7 +131,7 @@ function detectIntervals(
   }
   if (inSeg) segments.push({ start: segStart, end: smoothed.length - 1 })
 
-  // Merge segments with gaps < 30 seconds
+  // Merge gaps < 30s
   const merged: Segment[] = []
   for (const seg of segments) {
     if (merged.length > 0 && seg.start - merged[merged.length - 1].end < 30) {
@@ -108,7 +141,6 @@ function detectIntervals(
     }
   }
 
-  // Filter to >= 60 seconds and compute metrics
   return merged
     .filter(s => s.end - s.start >= 60)
     .map((s, i) => {
@@ -146,8 +178,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!accessToken) { res.status(401).json({ error: 'strava_not_connected' }); return }
 
   try {
+    // ── 1. Try Strava laps first ───────────────────────────────────────────────
+    const lapsRes = await fetch(
+      `https://www.strava.com/api/v3/activities/${activityId}/laps`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    )
+
+    if (lapsRes.ok) {
+      const laps = await lapsRes.json() as StravaLap[]
+      // Use laps if: more than 1 lap AND at least one lap has power data
+      const hasPower = laps.some(l => (l.average_watts ?? 0) > 0)
+      if (laps.length > 1 && hasPower) {
+        return res.status(200).json({ intervals: lapsToIntervals(laps, ftp), source: 'laps' })
+      }
+    }
+
+    // ── 2. Fall back to power stream detection ────────────────────────────────
     const streamsRes = await fetch(
-      `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=watts,heartrate,time&key_by_type=true`,
+      `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=watts,heartrate&key_by_type=true`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     )
 
@@ -157,17 +205,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const streams = await streamsRes.json() as Streams
-    const watts = streams.watts?.data
-    const heartrate = streams.heartrate?.data
-
-    if (!watts) {
-      // No power data (HR-only activity or no power meter)
-      res.status(200).json({ intervals: [] })
-      return
+    if (!streams.watts) {
+      return res.status(200).json({ intervals: [], source: 'none' })
     }
 
-    const intervals = detectIntervals(watts, heartrate, ftp)
-    res.status(200).json({ intervals })
+    const intervals = detectIntervalsFromStream(streams.watts.data, streams.heartrate?.data, ftp)
+    res.status(200).json({ intervals, source: 'stream' })
+
   } catch (err) {
     console.error('strava/streams error:', err)
     res.status(500).json({ error: 'internal_error' })
