@@ -92,7 +92,10 @@ export function PostRideReflection({ athlete, plannedSession, log, loadHistory, 
         }),
       })
 
-      if (!res.ok) throw new Error('chat_failed')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(errData.error === 'overloaded' ? 'overloaded' : 'chat_failed')
+      }
       const { reply } = await res.json() as { reply: string }
       addMessage({
         id: (Date.now() + 1).toString(),
@@ -100,11 +103,14 @@ export function PostRideReflection({ athlete, plannedSession, log, loadHistory, 
         content: reply,
         timestamp: new Date().toISOString(),
       })
-    } catch {
+    } catch (err) {
+      const isOverloaded = err instanceof Error && err.message === 'overloaded'
       addMessage({
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Sorry, I couldn\'t connect. Try again.',
+        content: isOverloaded
+          ? 'The AI is overloaded right now — try again in a moment.'
+          : 'Sorry, I couldn\'t connect. Try again.',
         timestamp: new Date().toISOString(),
       })
     } finally {

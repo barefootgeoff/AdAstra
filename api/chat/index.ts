@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../_session.js'
+import { callAnthropic } from '../_anthropic.js'
 import type { ChatMessage } from '../../src/models/chat'
 
 interface TrainingContext {
@@ -87,31 +88,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 512,
-        system: buildSystemPrompt(context),
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-      }),
+    const { text } = await callAnthropic({
+      apiKey,
+      model: 'claude-sonnet-4-6',
+      maxTokens: 512,
+      system: buildSystemPrompt(context),
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
     })
-
-    if (!response.ok) {
-      console.error('Anthropic error:', await response.text())
-      res.status(502).json({ error: 'upstream_error' })
-      return
-    }
-
-    const data = await response.json() as { content: Array<{ text: string }> }
-    res.status(200).json({ reply: data.content[0]?.text ?? '' })
+    res.status(200).json({ reply: text })
   } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
     console.error('api/chat error:', err)
-    res.status(500).json({ error: 'internal_error' })
+    if (code === 'overloaded') {
+      res.status(503).json({ error: 'overloaded' })
+    } else {
+      res.status(502).json({ error: 'upstream_error' })
+    }
   }
 }

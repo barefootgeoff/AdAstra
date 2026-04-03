@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../_session.js'
+import { callAnthropic } from '../_anthropic.js'
 import type { ChatMessage, PlanEditProposal } from '../../src/models/chat'
 
 interface GeneralChatContext {
@@ -191,33 +192,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
-        system: buildSystemPrompt(context),
-        messages: messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
-      }),
+    const { text: rawText } = await callAnthropic({
+      apiKey,
+      model: 'claude-sonnet-4-6',
+      maxTokens: 2048,
+      system: buildSystemPrompt(context),
+      messages: messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
     })
-
-    if (!response.ok) {
-      console.error('Anthropic error:', await response.text())
-      res.status(502).json({ error: 'upstream_error' })
-      return
-    }
-
-    const data = await response.json() as { content: Array<{ text: string }> }
-    const rawText = data.content[0]?.text ?? ''
     const { reply, planEdits } = parseReplyAndEdits(rawText)
     res.status(200).json({ reply, planEdits: planEdits.length ? planEdits : undefined })
   } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
     console.error('api/chat/general error:', err)
-    res.status(500).json({ error: 'internal_error' })
+    if (code === 'overloaded') {
+      res.status(503).json({ error: 'overloaded' })
+    } else {
+      res.status(502).json({ error: 'upstream_error' })
+    }
   }
 }

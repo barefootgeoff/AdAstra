@@ -158,7 +158,10 @@ export function CoachChat({
         }),
       })
 
-      if (!res.ok) throw new Error('chat_failed')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(errData.error === 'overloaded' ? 'overloaded' : 'chat_failed')
+      }
       const data = await res.json() as { reply: string; planEdits?: PlanEditProposal[] }
       addMessage({
         id: (Date.now() + 1).toString(),
@@ -168,11 +171,14 @@ export function CoachChat({
         planEdits: data.planEdits?.length ? data.planEdits : undefined,
         editsApplied: false,
       })
-    } catch {
+    } catch (err) {
+      const isOverloaded = err instanceof Error && err.message === 'overloaded'
       addMessage({
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "Sorry, I couldn't connect. Try again.",
+        content: isOverloaded
+          ? 'The AI is overloaded right now — try again in a moment.'
+          : "Sorry, I couldn't connect. Try again.",
         timestamp: new Date().toISOString(),
       })
     } finally {
