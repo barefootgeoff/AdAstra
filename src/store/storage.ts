@@ -1,11 +1,13 @@
 import type { AthleteProfile } from '../models/athlete'
 import type { WorkoutLog } from '../models/log'
 import type { TrainingPlan } from '../models/training'
+import type { Achievement } from '../models/achievement'
 
 const KEYS = {
   ATHLETE: 'adastra:athlete',
   LOGS: 'adastra:logs',
   PLANS: 'adastra:plans',
+  ACHIEVEMENTS: 'adastra:achievements',
 } as const
 
 // ─── Athlete ──────────────────────────────────────────────────────────────────
@@ -53,6 +55,26 @@ export function bulkUpsertWorkoutLogs(incoming: WorkoutLog[]): void {
 export function deleteWorkoutLog(id: string): void {
   const logs = getWorkoutLogs().filter(l => l.id !== id)
   localStorage.setItem(KEYS.LOGS, JSON.stringify(logs))
+}
+
+// ─── Achievements ─────────────────────────────────────────────────────────────
+export function getAchievements(): Achievement[] {
+  try {
+    const raw = localStorage.getItem(KEYS.ACHIEVEMENTS)
+    return raw ? (JSON.parse(raw) as Achievement[]) : []
+  } catch {
+    return []
+  }
+}
+
+export function addAchievements(incoming: Achievement[]): void {
+  if (!incoming.length) return
+  const existing = getAchievements()
+  const byId = new Map(existing.map(a => [a.id, a]))
+  for (const a of incoming) {
+    if (!byId.has(a.id)) byId.set(a.id, a)
+  }
+  localStorage.setItem(KEYS.ACHIEVEMENTS, JSON.stringify([...byId.values()]))
 }
 
 // ─── Training plans ───────────────────────────────────────────────────────────

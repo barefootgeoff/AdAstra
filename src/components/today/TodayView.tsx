@@ -6,8 +6,10 @@ import type { PlannedSession, TrainingPlan, WorkoutType } from '../../models/tra
 import type { Interval } from '../../models/interval'
 import { WorkoutLogger } from '../plan/WorkoutLogger'
 import { PostRideReflection } from './PostRideReflection'
+import { WorkoutAwards } from './WorkoutAwards'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
 import { daysUntil } from '../../utils/trainingMath'
+import type { Achievement } from '../../models/achievement'
 
 const TYPE_BADGE: Record<WorkoutType, { badge: string; label: string }> = {
   vo2:       { badge: 'bg-red-700 text-red-100',       label: 'VO₂'       },
@@ -64,10 +66,11 @@ interface Props {
   loadHistory: TrainingLoad[]
   athleteFTP: number
   plan: TrainingPlan
+  achievements: Achievement[]
   onSaveLog: (log: WorkoutLog) => void
 }
 
-export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, onSaveLog }: Props) {
+export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, achievements, onSaveLog }: Props) {
   const [logging, setLogging] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [intervals, setIntervals] = useState<Interval[] | null>(null)
@@ -157,6 +160,9 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
             Edit
           </button>
         </div>
+
+        {/* Quote + awards */}
+        <WorkoutAwards log={todayLog} achievements={achievements} />
 
         {/* Interval analysis */}
         {(intervalsLoading || (intervals && intervals.length > 0)) && (

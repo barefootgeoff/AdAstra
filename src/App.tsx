@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { useAthlete } from './store/useAthlete'
 import { useLogs } from './store/useLogs'
 import { usePlan } from './store/usePlan'
+import { useAchievements } from './store/useAchievements'
 import { useStrava } from './hooks/useStrava'
 import { useServerSync } from './hooks/useServerSync'
+import { computeAwards } from './utils/awards'
 import { AthleteDashboard } from './components/analysis/AthleteDashboard'
 import { FitnessTargetCard } from './components/analysis/FitnessTargetCard'
 import { TrainingLoadChart } from './components/analysis/TrainingLoadChart'
@@ -14,6 +16,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { TodayView } from './components/today/TodayView'
 import { CoachChat } from './components/chat/CoachChat'
 import type { TrainingWeek } from './models/training'
+import type { WorkoutLog } from './models/log'
 import type { TodayContext } from './models/chat'
 import { planDateToISO, todayISO } from './utils/dateHelpers'
 
@@ -42,6 +45,7 @@ export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
 
   const { plan, applyPlanEdits } = usePlan()
+  const { achievements, addAchievements } = useAchievements()
   const { syncState, serverData, pushAthlete, pushLogs } = useServerSync()
 
   const { athlete, updateAthlete, hydrateFromServer: hydrateAthlete } = useAthlete({
@@ -94,6 +98,22 @@ export default function App() {
       ? { actualTSS: todayLogEntry.actualTSS, normalizedWatts: todayLogEntry.normalizedWatts, avgHR: todayLogEntry.avgHR, rpe: todayLogEntry.rpe, notes: todayLogEntry.notes }
       : null,
     sessionDone: todayLogEntry?.completed ?? false,
+  }
+
+  function handleSaveLog(log: WorkoutLog) {
+    // Find planned TSS for this date to check beat-the-plan award
+    let plannedTSS: number | undefined
+    for (const week of plan.weeks) {
+      for (const day of week.days) {
+        if (planDateToISO(day.date, week.dates) === log.date && day.tss) {
+          plannedTSS = parseFloat(day.tss.replace(/[^0-9.]/g, ''))
+          break
+        }
+      }
+    }
+    const earned = computeAwards(log, logs, plannedTSS)
+    saveLog(log)
+    addAchievements(earned)
   }
 
   function switchTab(t: Tab) {
@@ -151,7 +171,8 @@ export default function App() {
             loadHistory={loadHistory}
             athleteFTP={athlete.ftp}
             plan={plan}
-            onSaveLog={saveLog}
+            achievements={achievements}
+            onSaveLog={handleSaveLog}
           />
         )}
 
