@@ -24,7 +24,7 @@ interface Props {
 }
 
 export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClose, onUpdateBriefing }: Props) {
-  const { messages, addMessage } = useChat('general')
+  const { messages, addMessage, clearMessages } = useChat('general')
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [editingBriefing, setEditingBriefing] = useState(false)
@@ -169,13 +169,23 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
             {editingBriefing ? 'Cancel' : 'Edit briefing'}
           </button>
         </div>
-        <button
-          onClick={onClose}
-          className="text-zinc-500 hover:text-zinc-300 text-xl leading-none px-1"
-          aria-label="Close"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-3">
+          {messages.length > 0 && (
+            <button
+              onClick={clearMessages}
+              className="text-[11px] text-zinc-600 hover:text-red-400 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="text-zinc-500 hover:text-zinc-300 text-xl leading-none px-1"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       {/* Briefing editor */}

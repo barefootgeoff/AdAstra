@@ -29,5 +29,15 @@ export function useChat(logId: string) {
     })
   }, [logId])
 
-  return { messages, addMessage }
+  const clearMessages = useCallback(() => {
+    setMessages([])
+    localStorage.removeItem(key(logId))
+    fetch('/api/chat/messages', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ logId, messages: [] }),
+    }).catch(() => {})
+  }, [logId])
+
+  return { messages, addMessage, clearMessages }
 }
