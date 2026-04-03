@@ -11,6 +11,13 @@ function findSession(plan: TrainingPlan, weekNum: number, dayDate: string) {
   return week?.days.find(d => d.date === dayDate) ?? null
 }
 
+function formatDayDate(dayDate: string): string {
+  const [m, d] = dayDate.split('/')
+  const date = new Date(`2026-${m.padStart(2, '0')}-${d.padStart(2, '0')}T12:00:00`)
+  const dayName = date.toLocaleDateString('en-US', { weekday: 'short' })
+  return `${dayName} ${dayDate}`
+}
+
 function DiffRow({ label, before, after }: { label: string; before: unknown; after: unknown }) {
   const fmt = (v: unknown) => {
     if (Array.isArray(v)) return v.slice(0, 2).join(' / ') + (v.length > 2 ? '…' : '')
@@ -66,7 +73,10 @@ export function PlanEditApproval({ edits, plan, applied, onApply, onDismiss }: P
           const changedKeys = Object.keys(edit.changes) as Array<keyof typeof edit.changes>
           return (
             <div key={idx} className="px-3 py-2.5">
-              <div className="text-xs font-medium text-zinc-200 mb-1.5">{edit.description}</div>
+              <div className="flex items-baseline gap-2 mb-1.5">
+                <span className="text-[10px] font-mono text-zinc-500 shrink-0">{formatDayDate(edit.dayDate)}</span>
+                <span className="text-xs font-medium text-zinc-200">{edit.description}</span>
+              </div>
               {/* Column headers */}
               <div className="grid grid-cols-[80px_1fr_1fr] gap-x-2 text-[9px] uppercase tracking-widest text-zinc-700 mb-1">
                 <span />
