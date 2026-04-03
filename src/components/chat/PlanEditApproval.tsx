@@ -74,7 +74,7 @@ export function PlanEditApproval({ edits, plan, applied, onApply, onDismiss }: P
                 <span>After</span>
               </div>
               {changedKeys.map(k => {
-                const before = existing ? (existing as Record<string, unknown>)[k] : undefined
+                const before = existing ? (existing as unknown as Record<string, unknown>)[k] : undefined
                 const after = (edit.changes as Record<string, unknown>)[k]
                 const label = k === 'type'
                   ? 'Type'
