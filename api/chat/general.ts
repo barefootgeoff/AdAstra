@@ -26,6 +26,12 @@ interface GeneralChatContext {
   } | null
   recentLoad: Array<{ date: string; ctl: number; atl: number; tsb: number; dailyTSS: number }>
   compliance: { planned: number; completed: number; skipped: number }
+  activeTab: 'today' | 'plan' | 'fitness'
+  todayContext: {
+    session: { label: string; type: string; details: string[]; tss?: string; duration?: string } | null
+    log: { actualTSS?: number; normalizedWatts?: number; avgHR?: number; rpe?: number; notes?: string } | null
+    sessionDone: boolean
+  }
 }
 
 const PLAN_EDITS_MARKER = 'PLAN_EDITS_JSON:'
@@ -51,6 +57,38 @@ function parseReplyAndEdits(text: string): { reply: string; planEdits: PlanEditP
   }
 }
 
+function buildViewContextSection(ctx: GeneralChatContext): string {
+  const { activeTab, todayContext } = ctx
+  if (activeTab === 'today') {
+    if (!todayContext.session) {
+      return 'Current view: Athlete is on the Today tab. No planned session today (rest or unplanned).'
+    }
+    const s = todayContext.session
+    const sessionLine = `${s.label} (${s.type})${s.duration ? `, ${s.duration}` : ''}${s.tss ? `, ~${s.tss} TSS` : ''}`
+    const detailsLine = s.details.slice(0, 4).join(' | ')
+    if (todayContext.sessionDone && todayContext.log) {
+      const l = todayContext.log
+      const actuals = [
+        l.actualTSS != null && `TSS ${l.actualTSS}`,
+        l.normalizedWatts != null && `NP ${l.normalizedWatts}W`,
+        l.avgHR != null && `avg HR ${l.avgHR}bpm`,
+        l.rpe != null && `RPE ${l.rpe}/10`,
+      ].filter(Boolean).join(', ')
+      return `Current view: Athlete is on the Today tab — session COMPLETED.
+Today's session: ${sessionLine}
+Session details: ${detailsLine}
+Actual result: ${actuals || 'logged'}${l.notes ? `\nAthlete notes: "${l.notes}"` : ''}`
+    }
+    return `Current view: Athlete is on the Today tab — session NOT YET completed, athlete is preparing.
+Today's session: ${sessionLine}
+Session details: ${detailsLine}`
+  }
+  if (activeTab === 'plan') {
+    return 'Current view: Athlete is looking at their full training plan — likely has a question about scheduling, session sequencing, or weekly structure.'
+  }
+  return 'Current view: Athlete is looking at their fitness/load metrics (CTL, ATL, TSB) — likely wants analysis of training load trends or pacing toward race day.'
+}
+
 function buildSystemPrompt(ctx: GeneralChatContext): string {
   const { athlete, fitness, currentWeek, nextWeek, recentLoad, compliance } = ctx
   const goal = athlete.goals[0]
@@ -58,6 +96,8 @@ function buildSystemPrompt(ctx: GeneralChatContext): string {
   const briefingSection = ctx.coachBriefing
     ? `Coach briefing from the athlete:\n"${ctx.coachBriefing}"\n\n`
     : ''
+
+  const viewContextSection = buildViewContextSection(ctx)
 
   const fitnessSection = fitness
     ? `Current fitness:
@@ -95,6 +135,8 @@ ${nextWeek.days.map(d => `  ○ ${d.day} ${d.date} — ${d.label} (${d.type})`).
 Athlete:
 - FTP ${athlete.ftp}W, Max HR ${athlete.maxHR}bpm, Weight ${athlete.weight}kg
 - Goal: ${goal?.name ?? 'n/a'} on ${goal?.date ?? 'n/a'}, target ${goal?.targetTime ?? 'n/a'}
+
+${viewContextSection}
 
 ${fitnessSection}
 

@@ -3,18 +3,36 @@ import type { AthleteProfile } from '../../models/athlete'
 import type { TrainingLoad } from '../../models/load'
 import type { WorkoutLog } from '../../models/log'
 import type { TrainingPlan } from '../../models/training'
-import type { PlanEditProposal } from '../../models/chat'
+import type { PlanEditProposal, CoachTab, TodayContext } from '../../models/chat'
 import { useChat } from '../../store/useChat'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
 import { Markdown } from '../../utils/markdown'
 import { PlanEditApproval } from './PlanEditApproval'
 
-const STARTERS = [
-  "How's my training going?",
-  'Should I adjust this week?',
-  'Help me plan race day nutrition',
-  'Am I on track for Leadville?',
-]
+function getStarters(tab: CoachTab, sessionDone: boolean): string[] {
+  if (tab === 'today') {
+    return sessionDone
+      ? ["How did my ride look?", "What should I focus on tomorrow?", "How's my recovery?", "Did I hit my targets?"]
+      : ["How should I approach today's session?", "Is my form right for this?", "What zones should I target?", "Should I do the alt workout?"]
+  }
+  if (tab === 'plan') {
+    return ["Help me adjust this week", "Should I move this session?", "Am I peaking at the right time?", "Can we add a recovery day?"]
+  }
+  return ["Analyze my training load", "Am I building too fast?", "When will I peak?", "Is my CTL on target?"]
+}
+
+function getIntroText(tab: CoachTab, sessionDone: boolean): string {
+  if (tab === 'today') return sessionDone ? "Great ride — let's debrief." : "Ready to prep for today's ride?"
+  if (tab === 'plan') return "Looking at your plan — what needs adjusting?"
+  return "Looking at your load trends — what do you want to know?"
+}
+
+function getPlaceholder(tab: CoachTab, sessionDone: boolean): string {
+  if (tab === 'today' && !sessionDone) return "How should I approach today's session?"
+  if (tab === 'today' && sessionDone) return "How did my ride look?"
+  if (tab === 'plan') return "Ask about your plan…"
+  return "Ask about your fitness…"
+}
 
 interface Props {
   athlete: AthleteProfile
@@ -22,6 +40,8 @@ interface Props {
   loadHistory: TrainingLoad[]
   logs: WorkoutLog[]
   plan: TrainingPlan
+  activeTab: CoachTab
+  todayContext: TodayContext
   onClose: () => void
   onUpdateBriefing: (text: string) => void
   onApplyPlanEdits: (edits: PlanEditProposal[]) => void
@@ -29,6 +49,7 @@ interface Props {
 
 export function CoachChat({
   athlete, latestLoad, loadHistory, logs, plan,
+  activeTab, todayContext,
   onClose, onUpdateBriefing, onApplyPlanEdits,
 }: Props) {
   const { messages, addMessage, updateMessage, clearMessages } = useChat('general')
@@ -78,7 +99,7 @@ export function CoachChat({
         const log = logs.find(l => l.date === iso)
         return {
           label: d.label, type: d.type,
-          day: d.day, date: d.date,   // exact strings for plan edit targeting
+          day: d.day, date: d.date,
           completed: log?.completed ?? false, skipped: log?.skipped ?? false,
         }
       })
@@ -101,6 +122,8 @@ export function CoachChat({
       currentWeek, nextWeek,
       recentLoad: loadHistory.slice(-14).map(l => ({ date: l.date, ctl: l.ctl, atl: l.atl, tsb: l.tsb, dailyTSS: l.dailyTSS })),
       compliance,
+      activeTab,
+      todayContext,
     }
   }
 
@@ -158,10 +181,16 @@ export function CoachChat({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col">
+    <div className="fixed inset-x-0 bottom-0 top-[10%] z-50 bg-zinc-950 border-t border-zinc-800 rounded-t-2xl flex flex-col shadow-2xl">
+      {/* Drag handle */}
+      <div className="flex justify-center pt-2.5 pb-1 shrink-0">
+        <div className="w-8 h-1 rounded-full bg-zinc-700" />
+      </div>
+
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">
+          <span className="text-blue-300 text-sm leading-none">✦</span>
           <span className="text-sm font-semibold text-zinc-100 tracking-wide">Coach</span>
           <button
             onClick={() => { setEditingBriefing(!editingBriefing); setBriefingDraft(athlete.coachBriefing ?? '') }}
@@ -202,10 +231,12 @@ export function CoachChat({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.length === 0 ? (
-          <div className="space-y-3 pt-4">
-            <p className="text-zinc-500 text-sm text-center">Ask your coach anything about your training.</p>
+          <div className="space-y-3 pt-2">
+            <p className="text-zinc-500 text-sm text-center">
+              {getIntroText(activeTab, todayContext.sessionDone)}
+            </p>
             <div className="flex flex-col gap-2">
-              {STARTERS.map(s => (
+              {getStarters(activeTab, todayContext.sessionDone).map(s => (
                 <button
                   key={s}
                   onClick={() => send(s)}
@@ -231,7 +262,6 @@ export function CoachChat({
                   : <p className="text-sm leading-relaxed">{msg.content}</p>
                 }
               </div>
-              {/* Plan edit approval card */}
               {msg.role === 'assistant' && msg.planEdits && msg.planEdits.length > 0 && (
                 <div className="w-full max-w-[85%]">
                   <PlanEditApproval
@@ -263,7 +293,7 @@ export function CoachChat({
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && send(input)}
-          placeholder="Ask your coach…"
+          placeholder={getPlaceholder(activeTab, todayContext.sessionDone)}
           className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
         />
         <button

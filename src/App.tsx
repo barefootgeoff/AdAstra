@@ -13,6 +13,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { TodayView } from './components/today/TodayView'
 import { CoachChat } from './components/chat/CoachChat'
 import type { TrainingWeek } from './models/training'
+import type { TodayContext } from './models/chat'
 import { planDateToISO, todayISO } from './utils/dateHelpers'
 
 const SEED_DATE = '2026-03-15'
@@ -75,6 +76,25 @@ export default function App() {
 
   const activeWeek = currentWeekIndex(plan.weeks)
 
+  // Compute today's plan entry + log for coach context
+  const todayStr = todayISO()
+  const todayPlanEntry = (() => {
+    for (const week of plan.weeks)
+      for (const day of week.days)
+        if (planDateToISO(day.date, week.dates) === todayStr) return day
+    return null
+  })()
+  const todayLogEntry = logs.find(l => l.date === todayStr) ?? null
+  const todayContext: TodayContext = {
+    session: todayPlanEntry
+      ? { label: todayPlanEntry.label, type: todayPlanEntry.type, details: todayPlanEntry.details, tss: todayPlanEntry.tss, duration: todayPlanEntry.duration }
+      : null,
+    log: todayLogEntry?.completed
+      ? { actualTSS: todayLogEntry.actualTSS, normalizedWatts: todayLogEntry.normalizedWatts, avgHR: todayLogEntry.avgHR, rpe: todayLogEntry.rpe, notes: todayLogEntry.notes }
+      : null,
+    sessionDone: todayLogEntry?.completed ?? false,
+  }
+
   function switchTab(t: Tab) {
     setTab(t)
     setDrawerOpen(false)
@@ -86,7 +106,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className={`min-h-screen bg-zinc-950 text-zinc-100 transition-[filter] duration-200 ${coachChatOpen ? 'blur-sm' : ''}`}>
       <div className="max-w-2xl mx-auto p-4 pb-10">
 
         {/* Header */}
@@ -206,17 +226,20 @@ export default function App() {
             </button>
           ))}
 
-          <div className="mx-4 my-2 border-t border-zinc-800" />
-
-          <button
-            onClick={openCoach}
-            className="flex items-center gap-3 px-4 py-3.5 text-sm text-left text-blue-300 hover:text-blue-200 hover:bg-zinc-800/50 transition-colors"
-          >
-            <span className="text-base w-5 text-center opacity-60">✦</span>
-            Coach
-          </button>
         </nav>
       </div>
+
+      {/* Coach FAB */}
+      {!coachChatOpen && (
+        <button
+          onClick={openCoach}
+          aria-label="Open Coach"
+          className="fixed bottom-6 right-5 z-40 flex items-center gap-2 px-4 py-3 rounded-2xl bg-zinc-800 border border-zinc-700 shadow-lg hover:bg-zinc-700 active:scale-95 transition-all duration-150"
+        >
+          <span className="text-blue-300 text-base leading-none">✦</span>
+          <span className="text-sm font-medium text-zinc-200 tracking-wide">Coach</span>
+        </button>
+      )}
 
       {/* Coach Chat overlay */}
       {coachChatOpen && (
@@ -226,6 +249,8 @@ export default function App() {
           loadHistory={loadHistory}
           logs={logs}
           plan={plan}
+          activeTab={tab}
+          todayContext={todayContext}
           onClose={() => setCoachChatOpen(false)}
           onUpdateBriefing={(text) => updateAthlete({ coachBriefing: text })}
           onApplyPlanEdits={applyPlanEdits}
