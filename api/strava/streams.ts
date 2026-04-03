@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../_session.js'
+import { getStravaAccessToken } from '../_stravaToken.js'
 import type { Interval } from '../../src/models/interval'
 
 // ─── Strava types ─────────────────────────────────────────────────────────────
@@ -21,50 +22,6 @@ interface StreamData {
 interface Streams {
   watts?: StreamData
   heartrate?: StreamData
-}
-
-// ─── Token helper ─────────────────────────────────────────────────────────────
-
-function parseCookies(header: string | undefined): Record<string, string> {
-  if (!header) return {}
-  return Object.fromEntries(
-    header.split(';').map(c => {
-      const [k, ...v] = c.trim().split('=')
-      return [k, v.join('=')]
-    }),
-  )
-}
-
-async function getAccessToken(req: VercelRequest, res: VercelResponse): Promise<string | null> {
-  const cookies = parseCookies(req.headers.cookie)
-  let accessToken = cookies.strava_access_token
-  const refreshToken = cookies.strava_refresh_token
-  const expiry = parseInt(cookies.strava_token_expiry ?? '0', 10)
-
-  if (!refreshToken) return null
-
-  if (!accessToken || Date.now() / 1000 > expiry - 60) {
-    const refreshRes = await fetch('https://www.strava.com/oauth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: process.env.STRAVA_CLIENT_ID,
-        client_secret: process.env.STRAVA_CLIENT_SECRET,
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token',
-      }),
-    })
-    if (!refreshRes.ok) return null
-    const data = await refreshRes.json() as { access_token: string; expires_at: number }
-    accessToken = data.access_token
-    const base = 'HttpOnly; Secure; SameSite=Lax; Path=/'
-    res.setHeader('Set-Cookie', [
-      `strava_access_token=${accessToken}; Max-Age=21600; ${base}`,
-      `strava_token_expiry=${data.expires_at}; Max-Age=31536000; ${base}`,
-    ])
-  }
-
-  return accessToken
 }
 
 // ─── TSS calculation ──────────────────────────────────────────────────────────
@@ -174,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!activityId) { res.status(400).json({ error: 'missing_activityId' }); return }
 
-  const accessToken = await getAccessToken(req, res)
+  const accessToken = await getStravaAccessToken(req, res)
   if (!accessToken) { res.status(401).json({ error: 'strava_not_connected' }); return }
 
   try {

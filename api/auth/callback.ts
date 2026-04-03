@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { saveStravaTokensToKV } from '../_stravaToken.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { code, error } = req.query
@@ -40,13 +41,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Store tokens in HTTP-only cookies (6h access token, 1yr refresh)
-    const secure = 'Secure; '
-    const base = `HttpOnly; ${secure}SameSite=Lax; Path=/`
+    const base = 'HttpOnly; Secure; SameSite=Lax; Path=/'
     res.setHeader('Set-Cookie', [
       `strava_access_token=${data.access_token}; Max-Age=21600; ${base}`,
       `strava_refresh_token=${data.refresh_token}; Max-Age=31536000; ${base}`,
       `strava_token_expiry=${data.expires_at}; Max-Age=31536000; ${base}`,
     ])
+
+    // Also persist to KV so any authenticated device can use Strava
+    await saveStravaTokensToKV(data.access_token, data.refresh_token, data.expires_at)
 
     res.redirect('/?strava=connected')
   } catch {

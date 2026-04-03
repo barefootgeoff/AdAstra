@@ -7,6 +7,7 @@ type SyncState = 'loading' | 'ready' | 'unauthenticated' | 'error'
 interface ServerData {
   athlete: AthleteProfile | null
   logs: WorkoutLog[]
+  stravaConnected: boolean
 }
 
 interface UseServerSyncResult {

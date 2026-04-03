@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getStravaAccessToken } from './_stravaToken.js'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,34 +38,6 @@ interface WorkoutLog {
 type WorkoutType = 'vo2' | 'threshold' | 'sweetspot' | 'endurance' | 'strength' | 'race' | 'rest'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function parseCookies(cookieHeader: string | undefined): Record<string, string> {
-  if (!cookieHeader) return {}
-  return Object.fromEntries(
-    cookieHeader.split(';').map(c => {
-      const [k, ...v] = c.trim().split('=')
-      return [k, v.join('=')]
-    })
-  )
-}
-
-async function refreshAccessToken(refreshToken: string): Promise<{
-  access_token: string
-  expires_at: number
-} | null> {
-  const res = await fetch('https://www.strava.com/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: process.env.STRAVA_CLIENT_ID,
-      client_secret: process.env.STRAVA_CLIENT_SECRET,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  })
-  if (!res.ok) return null
-  return res.json() as Promise<{ access_token: string; expires_at: number }>
-}
 
 // Classify workout type by Intensity Factor (NP / FTP)
 function classifyType(sport: string, np: number | undefined, ftp: number): WorkoutType {
@@ -112,29 +85,10 @@ function mapActivity(act: StravaActivity, ftp: number): WorkoutLog {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const cookies = parseCookies(req.headers.cookie)
-  let accessToken = cookies.strava_access_token
-  const refreshToken = cookies.strava_refresh_token
-  const expiry = parseInt(cookies.strava_token_expiry ?? '0', 10)
-
-  if (!refreshToken) {
+  const accessToken = await getStravaAccessToken(req, res)
+  if (!accessToken) {
     res.status(401).json({ error: 'not_connected' })
     return
-  }
-
-  // Refresh token if expired (with 60s buffer)
-  if (!accessToken || Date.now() / 1000 > expiry - 60) {
-    const refreshed = await refreshAccessToken(refreshToken)
-    if (!refreshed) {
-      res.status(401).json({ error: 'token_refresh_failed' })
-      return
-    }
-    accessToken = refreshed.access_token
-    const base = 'HttpOnly; Secure; SameSite=Lax; Path=/'
-    res.setHeader('Set-Cookie', [
-      `strava_access_token=${accessToken}; Max-Age=21600; ${base}`,
-      `strava_token_expiry=${refreshed.expires_at}; Max-Age=31536000; ${base}`,
-    ])
   }
 
   // Optional: ?after=unix_timestamp to limit how far back we fetch

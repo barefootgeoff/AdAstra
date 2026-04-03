@@ -1,6 +1,7 @@
 import { kv } from '@vercel/kv'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from './_session.js'
+import { isStravaConnected } from './_stravaToken.js'
 import type { AthleteProfile } from '../src/models/athlete'
 import type { WorkoutLog } from '../src/models/log'
 
@@ -12,11 +13,12 @@ const KEYS = {
 // ─── GET /api/data ─────────────────────────────────────────────────────────
 // Returns { athlete, logs }
 async function handleGet(res: VercelResponse) {
-  const [athlete, logs] = await Promise.all([
+  const [athlete, logs, stravaConnected] = await Promise.all([
     kv.get<AthleteProfile>(KEYS.ATHLETE),
     kv.get<WorkoutLog[]>(KEYS.LOGS),
+    isStravaConnected(),
   ])
-  res.status(200).json({ athlete: athlete ?? null, logs: logs ?? [] })
+  res.status(200).json({ athlete: athlete ?? null, logs: logs ?? [], stravaConnected })
 }
 
 // ─── PUT /api/data?resource=athlete ────────────────────────────────────────
