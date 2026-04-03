@@ -5,6 +5,7 @@ import { usePlan } from './store/usePlan'
 import { useStrava } from './hooks/useStrava'
 import { useServerSync } from './hooks/useServerSync'
 import { AthleteDashboard } from './components/analysis/AthleteDashboard'
+import { FitnessTargetCard } from './components/analysis/FitnessTargetCard'
 import { TrainingLoadChart } from './components/analysis/TrainingLoadChart'
 import { WeeklyTSSSummary } from './components/analysis/WeeklyTSSSummary'
 import { WeekBlock } from './components/plan/WeekBlock'
@@ -177,10 +178,13 @@ export default function App() {
         {tab === 'fitness' && (
           <>
             <AthleteDashboard athlete={athlete} latestLoad={latestLoad} />
+            <FitnessTargetCard athlete={athlete} latestLoad={latestLoad} />
             <TrainingLoadChart
               history={loadHistory}
               seedCTL={athlete.ctlBaseline}
               seedDate={SEED_DATE}
+              raceDate={athlete.goals[0]?.date ?? '2026-08-15'}
+              raceCTL={athlete.ctlTarget}
             />
             <WeeklyTSSSummary weeks={plan.weeks} logs={logs} />
           </>
