@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { PlannedSession, WorkoutType } from '../../models/training'
+import type { PlannedSession, PlanInterval, WorkoutType } from '../../models/training'
 import type { WorkoutLog } from '../../models/log'
 import { WorkoutLogger } from './WorkoutLogger'
 
@@ -13,16 +13,69 @@ const TYPE_CONFIG: Record<WorkoutType, { bg: string; border: string; badge: stri
   race:      { bg: 'bg-yellow-900/30', border: 'border-yellow-600', badge: 'bg-yellow-600 text-yellow-100', label: 'RACE'      },
 }
 
+function IntervalChart({ intervals }: { intervals: PlanInterval[] }) {
+  const maxP = Math.max(...intervals.map(x => x.power))
+  const minP = Math.min(...intervals.map(x => x.power)) - 30
+  const target = intervals[0].target
+  const notes = intervals.filter(iv => iv.note)
+
+  return (
+    <div>
+      <div className="text-[10px] tracking-widest text-red-400 uppercase mb-2">Interval Performance</div>
+      <div className="flex items-end gap-1.5 mb-2" style={{ height: 80 }}>
+        {intervals.map((iv, i) => {
+          const pct = ((iv.power - minP) / (maxP - minP)) * 100
+          const aboveTarget = iv.power >= iv.target
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-1">
+              <span className={`text-[10px] font-mono font-bold ${aboveTarget ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {iv.power}
+              </span>
+              <div
+                className="w-full rounded-t"
+                style={{
+                  height: `${Math.max(pct, 15)}%`,
+                  background: aboveTarget
+                    ? 'linear-gradient(to top, rgb(5,150,105), rgb(16,185,129))'
+                    : 'linear-gradient(to top, rgb(180,130,20), rgb(217,170,50))',
+                }}
+              />
+              <span className="text-[9px] text-zinc-500 font-mono">R{iv.rep}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex items-center gap-3 text-[9px] text-zinc-600">
+        <div className="flex items-center gap-1">
+          <div className="w-2 h-2 rounded-sm bg-emerald-500" /> Above target
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-2 h-2 rounded-sm bg-amber-500" /> Below target
+        </div>
+        <span className="ml-auto font-mono">Target: {target}W</span>
+      </div>
+      {notes.length > 0 && (
+        <div className="mt-1 space-y-0.5">
+          {notes.map((iv, i) => (
+            <div key={i} className="text-[9px] text-zinc-500 italic">R{iv.rep}: {iv.note}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface Props {
   session: PlannedSession
   planId: string
-  isoDate: string          // "2026-03-16"
+  isoDate: string
   existingLog: WorkoutLog | null
   athleteFTP: number
+  weekCompleted?: boolean
   onSaveLog: (log: WorkoutLog) => void
 }
 
-export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, onSaveLog }: Props) {
+export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, weekCompleted = false, onSaveLog }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [logging, setLogging] = useState(false)
   const config = TYPE_CONFIG[session.type]
@@ -30,9 +83,7 @@ export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, onS
 
   return (
     <>
-      <div
-        className={`${config.bg} border ${config.border} rounded-lg transition-all duration-200 hover:brightness-110`}
-      >
+      <div className={`${config.bg} border ${config.border} rounded-lg transition-all duration-200 hover:brightness-110`}>
         <div className="p-3" onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer' }}>
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
@@ -40,7 +91,6 @@ export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, onS
               <span className={`${config.badge} text-[10px] font-bold px-1.5 py-0.5 rounded tracking-wider`}>
                 {config.label}
               </span>
-              {/* Completion indicator */}
               {existingLog?.completed && (
                 <span className="bg-green-900/60 text-green-400 text-[10px] font-bold px-1.5 py-0.5 rounded tracking-wider">
                   ✓ {existingLog.actualTSS ? `${existingLog.actualTSS} TSS` : 'DONE'}
@@ -54,15 +104,10 @@ export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, onS
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 text-xs text-zinc-400">
-                {session.duration && session.duration !== '—' && (
-                  <span>{session.duration}</span>
-                )}
-                {session.tss && session.tss !== '—' && (
-                  <span className="font-mono">{session.tss} TSS</span>
-                )}
+                {session.duration && session.duration !== '—' && <span>{session.duration}</span>}
+                {session.tss && session.tss !== '—' && <span className="font-mono">{session.tss} TSS</span>}
               </div>
-              {/* Log button — hidden for rest days */}
-              {!isRest && (
+              {!isRest && !weekCompleted && (
                 <button
                   onClick={e => { e.stopPropagation(); setLogging(true) }}
                   className="text-zinc-500 hover:text-zinc-200 text-sm px-1.5 py-0.5 rounded hover:bg-zinc-700/50 transition-colors"
@@ -79,8 +124,24 @@ export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, onS
 
         {expanded && (
           <div className="px-3 pb-3 pl-10 space-y-3 border-t border-zinc-700/50 pt-3">
+            {/* Actual result — completed weeks */}
+            {session.actual && (
+              <div>
+                <div className="text-[10px] tracking-widest text-emerald-500 uppercase mb-1">Actual Result</div>
+                <div className="text-xs text-emerald-400/80 leading-relaxed font-mono">{session.actual}</div>
+              </div>
+            )}
+
+            {/* Interval bar chart */}
+            {session.intervals && session.intervals.length > 0 && (
+              <IntervalChart intervals={session.intervals} />
+            )}
+
+            {/* Session details */}
             <div>
-              <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-1">Session Details</div>
+              <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-1">
+                {weekCompleted ? 'Notes' : 'Session Details'}
+              </div>
               {session.details.map((d, i) => (
                 <div
                   key={i}
@@ -93,28 +154,27 @@ export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, onS
               ))}
             </div>
 
-            {session.fuel && (
+            {/* Fuel / Alt / Why — only for upcoming sessions */}
+            {!weekCompleted && session.fuel && (
               <div>
                 <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-1">Fuel</div>
                 <div className="text-xs text-zinc-400 leading-relaxed">{session.fuel}</div>
               </div>
             )}
-
-            {session.alt && (
+            {!weekCompleted && session.alt && (
               <div>
                 <div className="text-[10px] tracking-widest text-amber-600 uppercase mb-1">If Not Fresh</div>
                 <div className="text-xs text-amber-500/80 leading-relaxed">{session.alt}</div>
               </div>
             )}
-
-            {session.why && (
+            {!weekCompleted && session.why && (
               <div>
                 <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-1">Why It Works</div>
                 <div className="text-xs text-zinc-400 italic leading-relaxed">{session.why}</div>
               </div>
             )}
 
-            {/* Actual log summary if logged */}
+            {/* Logged data from WorkoutLog */}
             {existingLog && !existingLog.skipped && (
               <div className="bg-green-950/40 border border-green-800/40 rounded-lg p-3">
                 <div className="text-[10px] tracking-widest text-green-600 uppercase mb-2">Logged</div>

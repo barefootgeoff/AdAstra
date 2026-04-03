@@ -16,7 +16,7 @@ Cycling training dashboard for Leadville 100 MTB 2026 prep. React + Vite + Tailw
 - localStorage + KV dual persistence (fire-and-forget server push)
 - Training plan is static data (`src/data/leadville2026.ts`)
 - Feature plans go in `devplans/`
-- FAB navigation (bottom-right floating button) — not a tab bar
+- Hamburger menu (top-right header button) opens a right-side drawer for navigation (Today / Plan / Fitness / Coach)
 - Chat bubbles: user = `bg-zinc-700` right-aligned, assistant = `bg-zinc-800/80 border` left-aligned
 
 ## Key Architecture

@@ -8,6 +8,7 @@ import { AthleteDashboard } from './components/analysis/AthleteDashboard'
 import { TrainingLoadChart } from './components/analysis/TrainingLoadChart'
 import { WeeklyTSSSummary } from './components/analysis/WeeklyTSSSummary'
 import { WeekBlock } from './components/plan/WeekBlock'
+import { CritCalendar } from './components/plan/CritCalendar'
 import { LoginScreen } from './components/LoginScreen'
 import { TodayView } from './components/today/TodayView'
 import { CoachChat } from './components/chat/CoachChat'
@@ -18,6 +19,7 @@ const SEED_DATE = '2026-03-15'
 type Tab = 'today' | 'plan' | 'fitness'
 
 const TAB_LABELS: Record<Tab, string> = { today: 'Today', plan: 'Plan', fitness: 'Fitness' }
+const TAB_ICONS: Record<Tab, string> = { today: '◎', plan: '≡', fitness: '∿' }
 
 function currentWeekIndex(): number {
   const today = todayISO()
@@ -32,7 +34,7 @@ function currentWeekIndex(): number {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
-  const [fabOpen, setFabOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [coachChatOpen, setCoachChatOpen] = useState(false)
   const [authed, setAuthed] = useState<boolean | null>(null)
 
@@ -52,7 +54,7 @@ export default function App() {
     athlete.ftp,
     syncLogs,
     (maxHR) => { if (maxHR > athlete.maxHR) updateAthlete({ maxHR }) },
-    authed === true, // auto-sync once authenticated
+    authed === true,
   )
 
   useEffect(() => {
@@ -73,12 +75,17 @@ export default function App() {
 
   function switchTab(t: Tab) {
     setTab(t)
-    setFabOpen(false)
+    setDrawerOpen(false)
+  }
+
+  function openCoach() {
+    setCoachChatOpen(true)
+    setDrawerOpen(false)
   }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="max-w-2xl mx-auto p-4 pb-24">
+      <div className="max-w-2xl mx-auto p-4 pb-10">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -91,13 +98,24 @@ export default function App() {
             </p>
           </div>
 
-          {/* Compact Strava status */}
-          <StravaIndicator
-            status={stravaStatus}
-            lastSynced={lastSynced}
-            onConnect={connect}
-            onSync={sync}
-          />
+          <div className="flex items-center gap-3">
+            <StravaIndicator
+              status={stravaStatus}
+              lastSynced={lastSynced}
+              onConnect={connect}
+              onSync={sync}
+            />
+            {/* Hamburger button */}
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="flex flex-col justify-center items-center gap-1 w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 transition-colors"
+              aria-label="Menu"
+            >
+              <span className="w-4 h-px bg-zinc-400" />
+              <span className="w-4 h-px bg-zinc-400" />
+              <span className="w-4 h-px bg-zinc-400" />
+            </button>
+          </div>
         </div>
 
         {/* Tab content */}
@@ -125,6 +143,7 @@ export default function App() {
                 onSaveLog={saveLog}
               />
             ))}
+            <CritCalendar />
             <div className="mt-6 text-center text-zinc-600 text-[10px] tracking-wider uppercase">
               Plan is adaptive — actual execution drives weekly adjustments
             </div>
@@ -144,39 +163,58 @@ export default function App() {
         )}
       </div>
 
-      {/* FAB navigation */}
-      {fabOpen && (
-        // Backdrop — tap to close
+      {/* Side drawer backdrop */}
+      {drawerOpen && (
         <div
-          className="fixed inset-0 z-10"
-          onClick={() => setFabOpen(false)}
+          className="fixed inset-0 z-30 bg-black/50"
+          onClick={() => setDrawerOpen(false)}
         />
       )}
 
-      {/* Pills — visible when open */}
-      {fabOpen && (
-        <div className="fixed bottom-24 right-6 z-20 flex flex-col gap-2 items-end">
+      {/* Side drawer */}
+      <div
+        className={`fixed inset-y-0 right-0 z-40 w-64 bg-zinc-900 border-l border-zinc-800 flex flex-col transition-transform duration-200 ease-out
+          ${drawerOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        {/* Drawer header */}
+        <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-800">
+          <span className="text-sm font-semibold text-zinc-200 tracking-wide">Menu</span>
           <button
-            onClick={() => { setCoachChatOpen(true); setFabOpen(false) }}
-            className="rounded-full px-5 py-2 text-sm font-medium shadow-lg transition-all bg-zinc-800 border-2 border-blue-500 text-blue-300 hover:bg-zinc-700"
+            onClick={() => setDrawerOpen(false)}
+            className="text-zinc-500 hover:text-zinc-200 text-xl leading-none"
           >
-            Coach
+            ×
           </button>
-          {(['fitness', 'plan', 'today'] as Tab[]).map(t => (
+        </div>
+
+        {/* Nav items */}
+        <nav className="flex flex-col py-2">
+          {(['today', 'plan', 'fitness'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => switchTab(t)}
-              className={`rounded-full px-5 py-2 text-sm font-medium shadow-lg transition-all
+              className={`flex items-center gap-3 px-4 py-3.5 text-sm text-left transition-colors
                 ${tab === t
-                  ? 'bg-zinc-700 border-2 border-blue-500 text-white'
-                  : 'bg-zinc-800 border border-zinc-600 text-zinc-300 hover:bg-zinc-700'
+                  ? 'text-white bg-zinc-800 border-r-2 border-blue-500'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
                 }`}
             >
+              <span className="text-base w-5 text-center opacity-60">{TAB_ICONS[t]}</span>
               {TAB_LABELS[t]}
             </button>
           ))}
-        </div>
-      )}
+
+          <div className="mx-4 my-2 border-t border-zinc-800" />
+
+          <button
+            onClick={openCoach}
+            className="flex items-center gap-3 px-4 py-3.5 text-sm text-left text-blue-300 hover:text-blue-200 hover:bg-zinc-800/50 transition-colors"
+          >
+            <span className="text-base w-5 text-center opacity-60">✦</span>
+            Coach
+          </button>
+        </nav>
+      </div>
 
       {/* Coach Chat overlay */}
       {coachChatOpen && (
@@ -190,25 +228,6 @@ export default function App() {
           onUpdateBriefing={(text) => updateAthlete({ coachBriefing: text })}
         />
       )}
-
-      {/* FAB circle */}
-      <button
-        onClick={() => setFabOpen(!fabOpen)}
-        className={`fixed bottom-6 right-6 z-20 w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-200
-          ${fabOpen
-            ? 'bg-zinc-700 border-2 border-zinc-500 rotate-45'
-            : 'bg-zinc-800 border border-zinc-600'
-          }`}
-        aria-label="Navigation"
-      >
-        {fabOpen ? (
-          <span className="text-zinc-200 text-xl font-light">+</span>
-        ) : (
-          <span className="text-zinc-300 text-xs font-bold uppercase tracking-wider">
-            {tab[0].toUpperCase()}
-          </span>
-        )}
-      </button>
     </div>
   )
 }
@@ -234,7 +253,6 @@ function StravaIndicator({
       </button>
     )
   }
-
   if (status === 'syncing') {
     return (
       <div className="flex items-center gap-1.5 text-xs text-zinc-500">
@@ -243,7 +261,6 @@ function StravaIndicator({
       </div>
     )
   }
-
   if (status === 'error') {
     return (
       <button onClick={onSync} className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300">
@@ -252,7 +269,6 @@ function StravaIndicator({
       </button>
     )
   }
-
   if (status === 'done' && lastSynced) {
     return (
       <button onClick={onSync} className="flex items-center gap-1.5 text-xs text-green-500 hover:text-green-400">
@@ -261,8 +277,6 @@ function StravaIndicator({
       </button>
     )
   }
-
-  // idle — show nothing meaningful, Strava connected but not yet synced this session
   return (
     <button onClick={onSync} className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-zinc-400">
       <span className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />
