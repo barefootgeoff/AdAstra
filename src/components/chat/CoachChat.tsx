@@ -76,7 +76,11 @@ export function CoachChat({
       const weekDays = currentWeekData.days.map(d => {
         const iso = planDateToISO(d.date, currentWeekData.dates)
         const log = logs.find(l => l.date === iso)
-        return { label: d.label, type: d.type, completed: log?.completed ?? false, skipped: log?.skipped ?? false }
+        return {
+          label: d.label, type: d.type,
+          day: d.day, date: d.date,   // exact strings for plan edit targeting
+          completed: log?.completed ?? false, skipped: log?.skipped ?? false,
+        }
       })
       currentWeek = {
         weekNum: currentWeekData.week, phase: currentWeekData.phase,
@@ -84,9 +88,11 @@ export function CoachChat({
       }
     }
 
-    const nextWeek = nextWeekData
-      ? { weekNum: nextWeekData.week, phase: nextWeekData.phase, projectedTSS: nextWeekData.projectedTSS }
-      : null
+    const nextWeek = nextWeekData ? {
+      weekNum: nextWeekData.week, phase: nextWeekData.phase,
+      projectedTSS: nextWeekData.projectedTSS,
+      days: nextWeekData.days.map(d => ({ label: d.label, type: d.type, day: d.day, date: d.date })),
+    } : null
 
     return {
       athlete: { name: athlete.name, ftp: athlete.ftp, maxHR: athlete.maxHR, weight: athlete.weight, goals: athlete.goals },

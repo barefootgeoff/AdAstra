@@ -16,9 +16,14 @@ interface GeneralChatContext {
     weekNum: number
     phase: string
     projectedTSS: string
-    days: Array<{ label: string; type: string; completed: boolean; skipped: boolean }>
+    days: Array<{ label: string; type: string; day: string; date: string; completed: boolean; skipped: boolean }>
   } | null
-  nextWeek: { weekNum: number; phase: string; projectedTSS: string } | null
+  nextWeek: {
+    weekNum: number
+    phase: string
+    projectedTSS: string
+    days: Array<{ label: string; type: string; day: string; date: string }>
+  } | null
   recentLoad: Array<{ date: string; ctl: number; atl: number; tsb: number; dailyTSS: number }>
   compliance: { planned: number; completed: number; skipped: number }
 }
@@ -65,12 +70,13 @@ function buildSystemPrompt(ctx: GeneralChatContext): string {
     ? `Current training week (Week ${currentWeek.weekNum} — ${currentWeek.phase}, projected TSS ${currentWeek.projectedTSS}):
 ${currentWeek.days.map(d => {
   const status = d.completed ? '✓' : d.skipped ? '✗' : '○'
-  return `  ${status} ${d.label} (${d.type})`
+  return `  ${status} ${d.day} ${d.date} — ${d.label} (${d.type})`
 }).join('\n')}`
     : 'Current week: no plan data'
 
   const nextWeekSection = nextWeek
-    ? `Next week: Week ${nextWeek.weekNum} — ${nextWeek.phase}, projected TSS ${nextWeek.projectedTSS}`
+    ? `Next week (Week ${nextWeek.weekNum} — ${nextWeek.phase}, projected TSS ${nextWeek.projectedTSS}):
+${nextWeek.days.map(d => `  ○ ${d.day} ${d.date} — ${d.label} (${d.type})`).join('\n')}`
     : ''
 
   const loadTrend = recentLoad.length >= 2
@@ -103,12 +109,12 @@ ${loadTrend ? loadTrend : ''}
 Use markdown in your replies: **bold** for emphasis, bullet lists for session details, ## headings for sections, and --- to separate sections. Keep replies focused and conversational.
 
 ## Plan Editing
-You can propose direct edits to the athlete's training plan. When proposing changes (swapping sessions, adjusting targets, modifying details), include a JSON block at the very end of your reply using EXACTLY this format:
+You can propose direct edits to the athlete's training plan. When proposing changes (swapping sessions, adjusting targets, moving sessions to other days), include a JSON block at the very end of your reply using EXACTLY this format:
 
 PLAN_EDITS_JSON:[
   {
-    "weekNum": <number>,
-    "dayDate": "<date string matching the plan, e.g. 4/3>",
+    "weekNum": <number — must match week number shown above>,
+    "dayDate": "<date string — MUST exactly match the date shown above, e.g. '4/3'>",
     "description": "<one-line human summary of the change>",
     "changes": {
       "label": "<optional new label>",
@@ -122,7 +128,9 @@ PLAN_EDITS_JSON:[
   }
 ]
 
-Only include fields that actually change. Only add PLAN_EDITS_JSON when proposing concrete plan changes. The athlete will see an approval screen before changes are applied. Do NOT add PLAN_EDITS_JSON for general advice or analysis.`
+IMPORTANT: dayDate must be copied exactly from the plan (e.g. "4/3", "4/6") — do not reformat it.
+To MOVE a session: include TWO entries — one to replace the original slot, one to fill the destination slot.
+Only include fields that actually change. Only add PLAN_EDITS_JSON when proposing concrete plan changes the athlete confirmed or asked for. The athlete sees an approval screen before anything is applied.`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
