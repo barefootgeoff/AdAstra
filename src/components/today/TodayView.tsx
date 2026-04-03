@@ -2,11 +2,10 @@ import { useState, useEffect } from 'react'
 import type { AthleteProfile } from '../../models/athlete'
 import type { TrainingLoad } from '../../models/load'
 import type { WorkoutLog } from '../../models/log'
-import type { PlannedSession, WorkoutType } from '../../models/training'
+import type { PlannedSession, TrainingPlan, WorkoutType } from '../../models/training'
 import type { Interval } from '../../models/interval'
 import { WorkoutLogger } from '../plan/WorkoutLogger'
 import { PostRideReflection } from './PostRideReflection'
-import { LEADVILLE_2026 } from '../../data/leadville2026'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
 import { daysUntil } from '../../utils/trainingMath'
 
@@ -34,9 +33,9 @@ function tsbLabel(tsb: number) {
   return 'VERY TIRED'
 }
 
-function findTodaySession(): { session: PlannedSession; weekNum: number } | null {
+function findTodaySession(plan: TrainingPlan): { session: PlannedSession; weekNum: number } | null {
   const today = todayISO()
-  for (const week of LEADVILLE_2026.weeks) {
+  for (const week of plan.weeks) {
     for (const day of week.days) {
       if (planDateToISO(day.date, week.dates) === today) {
         return { session: day, weekNum: week.week }
@@ -64,17 +63,18 @@ interface Props {
   logs: WorkoutLog[]
   loadHistory: TrainingLoad[]
   athleteFTP: number
+  plan: TrainingPlan
   onSaveLog: (log: WorkoutLog) => void
 }
 
-export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, onSaveLog }: Props) {
+export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, onSaveLog }: Props) {
   const [logging, setLogging] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [intervals, setIntervals] = useState<Interval[] | null>(null)
   const [intervalsLoading, setIntervalsLoading] = useState(false)
 
   const today = todayISO()
-  const found = findTodaySession()
+  const found = findTodaySession(plan)
   const todayLog = logs.find(l => l.date === today) ?? null
   const primaryGoal = athlete.goals[0]
   const daysToRace = primaryGoal ? daysUntil(primaryGoal.date) : null
@@ -193,7 +193,7 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
         {logging && (
           <WorkoutLogger
             session={session}
-            planId={LEADVILLE_2026.id}
+            planId={plan.id}
             existingLog={todayLog}
             athleteFTP={athleteFTP}
             isoDate={today}
@@ -330,7 +330,7 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
       {logging && (
         <WorkoutLogger
           session={session}
-          planId={LEADVILLE_2026.id}
+          planId={plan.id}
           existingLog={todayLog}
           athleteFTP={athleteFTP}
           isoDate={today}

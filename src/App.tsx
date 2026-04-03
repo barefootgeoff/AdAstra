@@ -149,6 +149,7 @@ export default function App() {
             logs={logs}
             loadHistory={loadHistory}
             athleteFTP={athlete.ftp}
+            plan={plan}
             onSaveLog={saveLog}
           />
         )}
