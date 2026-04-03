@@ -76,11 +76,12 @@ export default function App() {
     if (syncState !== 'ready' || !serverData) return
     if (serverData.athlete) hydrateAthlete(serverData.athlete)
     if (serverData.logs.length > 0) hydrateLogs(serverData.logs)
-    if (serverData.planOverrides.length > 0) {
-      hydratePlan(serverData.planOverrides)
-    } else if (overrides.length > 0) {
-      // Bootstrap: server has no overrides yet — push local ones up so all devices sync
+    if (overrides.length > 0) {
+      // This device has local overrides — push to KV on every load so other devices stay current
       pushPlanOverrides(overrides)
+    } else if (serverData.planOverrides.length > 0) {
+      // This device has no local overrides but server does — hydrate (new/fresh device)
+      hydratePlan(serverData.planOverrides)
     }
   }, [syncState]) // eslint-disable-line react-hooks/exhaustive-deps
 
