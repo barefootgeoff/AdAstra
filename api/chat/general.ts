@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../_session.js'
-import type { ChatMessage } from '../../src/models/chat'
+import type { ChatMessage, PlanEditProposal } from '../../src/models/chat'
 
 interface GeneralChatContext {
   athlete: {
@@ -23,12 +23,27 @@ interface GeneralChatContext {
   compliance: { planned: number; completed: number; skipped: number }
 }
 
+const PLAN_EDITS_MARKER = 'PLAN_EDITS_JSON:'
+
 function tsbState(tsb: number): string {
   if (tsb > 10) return 'fresh'
   if (tsb > 0) return 'neutral'
   if (tsb > -10) return 'slightly fatigued'
   if (tsb > -20) return 'fatigued'
   return 'very fatigued'
+}
+
+function parseReplyAndEdits(text: string): { reply: string; planEdits: PlanEditProposal[] } {
+  const markerIdx = text.lastIndexOf(PLAN_EDITS_MARKER)
+  if (markerIdx === -1) return { reply: text.trim(), planEdits: [] }
+  const reply = text.slice(0, markerIdx).trim()
+  try {
+    const raw = text.slice(markerIdx + PLAN_EDITS_MARKER.length).trim()
+    const planEdits = JSON.parse(raw) as PlanEditProposal[]
+    return { reply, planEdits: Array.isArray(planEdits) ? planEdits : [] }
+  } catch {
+    return { reply, planEdits: [] }
+  }
 }
 
 function buildSystemPrompt(ctx: GeneralChatContext): string {
@@ -69,7 +84,7 @@ ${currentWeek.days.map(d => {
 
   const complianceSection = `Last 14 days: ${compliance.completed} completed, ${compliance.skipped} skipped (of ${compliance.planned} planned)`
 
-  return `${briefingSection}You are a cycling coach having a general training conversation with ${athlete.name}.
+  return `${briefingSection}You are a cycling coach having a training conversation with ${athlete.name}.
 
 Athlete:
 - FTP ${athlete.ftp}W, Max HR ${athlete.maxHR}bpm, Weight ${athlete.weight}kg
@@ -84,7 +99,30 @@ Training compliance:
 ${complianceSection}
 ${loadTrend ? loadTrend : ''}
 
-You know this athlete's history and current plan. When asked about adjustments, give specific recommendations with rationale — but frame them as suggestions the athlete applies manually. Be direct and conversational. Use ${athlete.name}'s name occasionally.`
+## Formatting
+Use markdown in your replies: **bold** for emphasis, bullet lists for session details, ## headings for sections, and --- to separate sections. Keep replies focused and conversational.
+
+## Plan Editing
+You can propose direct edits to the athlete's training plan. When proposing changes (swapping sessions, adjusting targets, modifying details), include a JSON block at the very end of your reply using EXACTLY this format:
+
+PLAN_EDITS_JSON:[
+  {
+    "weekNum": <number>,
+    "dayDate": "<date string matching the plan, e.g. 4/3>",
+    "description": "<one-line human summary of the change>",
+    "changes": {
+      "label": "<optional new label>",
+      "type": "<optional: vo2|threshold|sweetspot|strength|endurance|race|rest>",
+      "details": ["<optional new details array>"],
+      "duration": "<optional>",
+      "tss": "<optional>",
+      "fuel": "<optional>",
+      "why": "<optional>"
+    }
+  }
+]
+
+Only include fields that actually change. Only add PLAN_EDITS_JSON when proposing concrete plan changes. The athlete will see an approval screen before changes are applied. Do NOT add PLAN_EDITS_JSON for general advice or analysis.`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -112,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: buildSystemPrompt(context),
         messages: messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
       }),
@@ -125,7 +163,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const data = await response.json() as { content: Array<{ text: string }> }
-    res.status(200).json({ reply: data.content[0]?.text ?? '' })
+    const rawText = data.content[0]?.text ?? ''
+    const { reply, planEdits } = parseReplyAndEdits(rawText)
+    res.status(200).json({ reply, planEdits: planEdits.length ? planEdits : undefined })
   } catch (err) {
     console.error('api/chat/general error:', err)
     res.status(500).json({ error: 'internal_error' })

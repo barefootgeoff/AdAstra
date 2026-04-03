@@ -15,19 +15,30 @@ export function useChat(logId: string) {
     }
   })
 
+  const persist = useCallback((msgs: ChatMessage[]) => {
+    localStorage.setItem(key(logId), JSON.stringify(msgs))
+    fetch('/api/chat/messages', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ logId, messages: msgs }),
+    }).catch(() => {})
+  }, [logId])
+
   const addMessage = useCallback((msg: ChatMessage) => {
     setMessages(prev => {
       const next = [...prev, msg]
-      localStorage.setItem(key(logId), JSON.stringify(next))
-      // Fire-and-forget persist to server
-      fetch('/api/chat/messages', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logId, messages: next }),
-      }).catch(() => {})
+      persist(next)
       return next
     })
-  }, [logId])
+  }, [persist])
+
+  const updateMessage = useCallback((id: string, patch: Partial<ChatMessage>) => {
+    setMessages(prev => {
+      const next = prev.map(m => m.id === id ? { ...m, ...patch } : m)
+      persist(next)
+      return next
+    })
+  }, [persist])
 
   const clearMessages = useCallback(() => {
     setMessages([])
@@ -39,5 +50,5 @@ export function useChat(logId: string) {
     }).catch(() => {})
   }, [logId])
 
-  return { messages, addMessage, clearMessages }
+  return { messages, addMessage, updateMessage, clearMessages }
 }

@@ -1,10 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { AthleteProfile } from '../../models/athlete'
 import type { TrainingLoad } from '../../models/load'
 import type { WorkoutLog } from '../../models/log'
 import type { TrainingPlan } from '../../models/training'
+import type { PlanEditProposal } from '../../models/chat'
 import { useChat } from '../../store/useChat'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
+import { Markdown } from '../../utils/markdown'
+import { PlanEditApproval } from './PlanEditApproval'
 
 const STARTERS = [
   "How's my training going?",
@@ -21,10 +24,14 @@ interface Props {
   plan: TrainingPlan
   onClose: () => void
   onUpdateBriefing: (text: string) => void
+  onApplyPlanEdits: (edits: PlanEditProposal[]) => void
 }
 
-export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClose, onUpdateBriefing }: Props) {
-  const { messages, addMessage, clearMessages } = useChat('general')
+export function CoachChat({
+  athlete, latestLoad, loadHistory, logs, plan,
+  onClose, onUpdateBriefing, onApplyPlanEdits,
+}: Props) {
+  const { messages, addMessage, updateMessage, clearMessages } = useChat('general')
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [editingBriefing, setEditingBriefing] = useState(false)
@@ -42,14 +49,11 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
 
   function buildContext() {
     const today = todayISO()
-
-    // Find current week index
     let weekIdx = 0
     outer: for (let i = 0; i < plan.weeks.length; i++) {
       for (const day of plan.weeks[i].days) {
         if (planDateToISO(day.date, plan.weeks[i].dates) === today) {
-          weekIdx = i
-          break outer
+          weekIdx = i; break outer
         }
       }
     }
@@ -57,7 +61,6 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
     const currentWeekData = plan.weeks[weekIdx] ?? null
     const nextWeekData = plan.weeks[weekIdx + 1] ?? null
 
-    // Build compliance: last 14 days
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - 14)
     const cutoffISO = cutoff.toISOString().slice(0, 10)
@@ -68,51 +71,41 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
       skipped: recentLogs.filter(l => l.skipped).length,
     }
 
-    // Current week session completion
     let currentWeek = null
     if (currentWeekData) {
       const weekDays = currentWeekData.days.map(d => {
         const iso = planDateToISO(d.date, currentWeekData.dates)
         const log = logs.find(l => l.date === iso)
-        return {
-          label: d.label,
-          type: d.type,
-          completed: log?.completed ?? false,
-          skipped: log?.skipped ?? false,
-        }
+        return { label: d.label, type: d.type, completed: log?.completed ?? false, skipped: log?.skipped ?? false }
       })
       currentWeek = {
-        weekNum: currentWeekData.week,
-        phase: currentWeekData.phase,
-        projectedTSS: currentWeekData.projectedTSS,
-        days: weekDays,
+        weekNum: currentWeekData.week, phase: currentWeekData.phase,
+        projectedTSS: currentWeekData.projectedTSS, days: weekDays,
       }
     }
 
-    const nextWeek = nextWeekData ? {
-      weekNum: nextWeekData.week,
-      phase: nextWeekData.phase,
-      projectedTSS: nextWeekData.projectedTSS,
-    } : null
+    const nextWeek = nextWeekData
+      ? { weekNum: nextWeekData.week, phase: nextWeekData.phase, projectedTSS: nextWeekData.projectedTSS }
+      : null
 
     return {
-      athlete: {
-        name: athlete.name,
-        ftp: athlete.ftp,
-        maxHR: athlete.maxHR,
-        weight: athlete.weight,
-        goals: athlete.goals,
-      },
+      athlete: { name: athlete.name, ftp: athlete.ftp, maxHR: athlete.maxHR, weight: athlete.weight, goals: athlete.goals },
       coachBriefing: athlete.coachBriefing,
       fitness: latestLoad ? { ctl: latestLoad.ctl, atl: latestLoad.atl, tsb: latestLoad.tsb } : null,
-      currentWeek,
-      nextWeek,
-      recentLoad: loadHistory.slice(-14).map(l => ({
-        date: l.date, ctl: l.ctl, atl: l.atl, tsb: l.tsb, dailyTSS: l.dailyTSS,
-      })),
+      currentWeek, nextWeek,
+      recentLoad: loadHistory.slice(-14).map(l => ({ date: l.date, ctl: l.ctl, atl: l.atl, tsb: l.tsb, dailyTSS: l.dailyTSS })),
       compliance,
     }
   }
+
+  const handleApplyEdits = useCallback((msgId: string, edits: PlanEditProposal[]) => {
+    onApplyPlanEdits(edits)
+    updateMessage(msgId, { editsApplied: true })
+  }, [onApplyPlanEdits, updateMessage])
+
+  const handleDismissEdits = useCallback((msgId: string) => {
+    updateMessage(msgId, { editsApplied: true })
+  }, [updateMessage])
 
   async function send(text: string) {
     if (!text.trim() || loading) return
@@ -137,12 +130,14 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
       })
 
       if (!res.ok) throw new Error('chat_failed')
-      const { reply } = await res.json() as { reply: string }
+      const data = await res.json() as { reply: string; planEdits?: PlanEditProposal[] }
       addMessage({
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: reply,
+        content: data.reply,
         timestamp: new Date().toISOString(),
+        planEdits: data.planEdits?.length ? data.planEdits : undefined,
+        editsApplied: false,
       })
     } catch {
       addMessage({
@@ -157,7 +152,7 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
   }
 
   return (
-    <div className="fixed inset-0 z-30 bg-zinc-950 flex flex-col">
+    <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">
@@ -171,18 +166,11 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
         </div>
         <div className="flex items-center gap-3">
           {messages.length > 0 && (
-            <button
-              onClick={clearMessages}
-              className="text-[11px] text-zinc-600 hover:text-red-400 transition-colors"
-            >
+            <button onClick={clearMessages} className="text-[11px] text-zinc-600 hover:text-red-400 transition-colors">
               Clear
             </button>
           )}
-          <button
-            onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 text-xl leading-none px-1"
-            aria-label="Close"
-          >
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-xl leading-none px-1" aria-label="Close">
             ×
           </button>
         </div>
@@ -199,10 +187,7 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
             placeholder="Tell your coach about your goals, constraints, and what to hold you accountable for…"
           />
-          <button
-            onClick={saveBriefing}
-            className="mt-2 bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-1.5 rounded-lg transition-colors"
-          >
+          <button onClick={saveBriefing} className="mt-2 bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-1.5 rounded-lg transition-colors">
             Save
           </button>
         </div>
@@ -227,19 +212,31 @@ export function CoachChat({ athlete, latestLoad, loadHistory, logs, plan, onClos
           </div>
         ) : (
           messages.map(msg => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
+            <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
               <div
-                className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                className={`max-w-[85%] rounded-xl px-3 py-2 ${
                   msg.role === 'user'
                     ? 'bg-zinc-700 text-zinc-100'
                     : 'bg-zinc-800/80 border border-zinc-700 text-zinc-300'
                 }`}
               >
-                {msg.content}
+                {msg.role === 'assistant'
+                  ? <Markdown content={msg.content} />
+                  : <p className="text-sm leading-relaxed">{msg.content}</p>
+                }
               </div>
+              {/* Plan edit approval card */}
+              {msg.role === 'assistant' && msg.planEdits && msg.planEdits.length > 0 && (
+                <div className="w-full max-w-[85%]">
+                  <PlanEditApproval
+                    edits={msg.planEdits}
+                    plan={plan}
+                    applied={msg.editsApplied ?? false}
+                    onApply={() => handleApplyEdits(msg.id, msg.planEdits!)}
+                    onDismiss={() => handleDismissEdits(msg.id)}
+                  />
+                </div>
+              )}
             </div>
           ))
         )}

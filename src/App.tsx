@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useAthlete } from './store/useAthlete'
 import { useLogs } from './store/useLogs'
+import { usePlan } from './store/usePlan'
 import { useStrava } from './hooks/useStrava'
 import { useServerSync } from './hooks/useServerSync'
-import { LEADVILLE_2026 } from './data/leadville2026'
 import { AthleteDashboard } from './components/analysis/AthleteDashboard'
 import { TrainingLoadChart } from './components/analysis/TrainingLoadChart'
 import { WeeklyTSSSummary } from './components/analysis/WeeklyTSSSummary'
@@ -12,6 +12,7 @@ import { CritCalendar } from './components/plan/CritCalendar'
 import { LoginScreen } from './components/LoginScreen'
 import { TodayView } from './components/today/TodayView'
 import { CoachChat } from './components/chat/CoachChat'
+import type { TrainingWeek } from './models/training'
 import { planDateToISO, todayISO } from './utils/dateHelpers'
 
 const SEED_DATE = '2026-03-15'
@@ -21,10 +22,10 @@ type Tab = 'today' | 'plan' | 'fitness'
 const TAB_LABELS: Record<Tab, string> = { today: 'Today', plan: 'Plan', fitness: 'Fitness' }
 const TAB_ICONS: Record<Tab, string> = { today: '◎', plan: '≡', fitness: '∿' }
 
-function currentWeekIndex(): number {
+function currentWeekIndex(weeks: TrainingWeek[]): number {
   const today = todayISO()
-  for (let i = 0; i < LEADVILLE_2026.weeks.length; i++) {
-    const week = LEADVILLE_2026.weeks[i]
+  for (let i = 0; i < weeks.length; i++) {
+    const week = weeks[i]
     for (const day of week.days) {
       if (planDateToISO(day.date, week.dates) === today) return i
     }
@@ -38,6 +39,7 @@ export default function App() {
   const [coachChatOpen, setCoachChatOpen] = useState(false)
   const [authed, setAuthed] = useState<boolean | null>(null)
 
+  const { plan, applyPlanEdits } = usePlan()
   const { syncState, serverData, pushAthlete, pushLogs } = useServerSync()
 
   const { athlete, updateAthlete, hydrateFromServer: hydrateAthlete } = useAthlete({
@@ -71,7 +73,7 @@ export default function App() {
   if (authed === null) return <div className="min-h-screen bg-zinc-950" />
   if (authed === false) return <LoginScreen onLogin={() => setAuthed(true)} />
 
-  const activeWeek = currentWeekIndex()
+  const activeWeek = currentWeekIndex(plan.weeks)
 
   function switchTab(t: Tab) {
     setTab(t)
@@ -132,11 +134,11 @@ export default function App() {
 
         {tab === 'plan' && (
           <>
-            {LEADVILLE_2026.weeks.map((week, i) => (
+            {plan.weeks.map((week, i) => (
               <WeekBlock
                 key={week.week}
                 week={week}
-                planId={LEADVILLE_2026.id}
+                planId={plan.id}
                 defaultOpen={i === activeWeek}
                 logs={logs}
                 athleteFTP={athlete.ftp}
@@ -158,7 +160,7 @@ export default function App() {
               seedCTL={athlete.ctlBaseline}
               seedDate={SEED_DATE}
             />
-            <WeeklyTSSSummary weeks={LEADVILLE_2026.weeks} logs={logs} />
+            <WeeklyTSSSummary weeks={plan.weeks} logs={logs} />
           </>
         )}
       </div>
@@ -223,9 +225,10 @@ export default function App() {
           latestLoad={latestLoad}
           loadHistory={loadHistory}
           logs={logs}
-          plan={LEADVILLE_2026}
+          plan={plan}
           onClose={() => setCoachChatOpen(false)}
           onUpdateBriefing={(text) => updateAthlete({ coachBriefing: text })}
+          onApplyPlanEdits={applyPlanEdits}
         />
       )}
     </div>
