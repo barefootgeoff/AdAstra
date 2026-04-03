@@ -10,6 +10,7 @@ import { WeeklyTSSSummary } from './components/analysis/WeeklyTSSSummary'
 import { WeekBlock } from './components/plan/WeekBlock'
 import { LoginScreen } from './components/LoginScreen'
 import { TodayView } from './components/today/TodayView'
+import { CoachChat } from './components/chat/CoachChat'
 import { planDateToISO, todayISO } from './utils/dateHelpers'
 
 const SEED_DATE = '2026-03-15'
@@ -32,6 +33,7 @@ function currentWeekIndex(): number {
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [fabOpen, setFabOpen] = useState(false)
+  const [coachChatOpen, setCoachChatOpen] = useState(false)
   const [authed, setAuthed] = useState<boolean | null>(null)
 
   const { syncState, serverData, pushAthlete, pushLogs } = useServerSync()
@@ -154,6 +156,12 @@ export default function App() {
       {/* Pills — visible when open */}
       {fabOpen && (
         <div className="fixed bottom-24 right-6 z-20 flex flex-col gap-2 items-end">
+          <button
+            onClick={() => { setCoachChatOpen(true); setFabOpen(false) }}
+            className="rounded-full px-5 py-2 text-sm font-medium shadow-lg transition-all bg-zinc-800 border-2 border-blue-500 text-blue-300 hover:bg-zinc-700"
+          >
+            Coach
+          </button>
           {(['fitness', 'plan', 'today'] as Tab[]).map(t => (
             <button
               key={t}
@@ -168,6 +176,19 @@ export default function App() {
             </button>
           ))}
         </div>
+      )}
+
+      {/* Coach Chat overlay */}
+      {coachChatOpen && (
+        <CoachChat
+          athlete={athlete}
+          latestLoad={latestLoad}
+          loadHistory={loadHistory}
+          logs={logs}
+          plan={LEADVILLE_2026}
+          onClose={() => setCoachChatOpen(false)}
+          onUpdateBriefing={(text) => updateAthlete({ coachBriefing: text })}
+        />
       )}
 
       {/* FAB circle */}
