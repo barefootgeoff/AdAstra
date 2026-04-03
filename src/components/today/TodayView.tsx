@@ -187,6 +187,7 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
           log={todayLog}
           loadHistory={loadHistory}
           intervals={intervals ?? []}
+          coachBriefing={athlete.coachBriefing}
         />
 
         {logging && (

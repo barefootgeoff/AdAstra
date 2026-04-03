@@ -18,9 +18,10 @@ interface Props {
   log: WorkoutLog
   loadHistory: TrainingLoad[]
   intervals: Interval[]
+  coachBriefing?: string
 }
 
-export function PostRideReflection({ athlete, plannedSession, log, loadHistory, intervals }: Props) {
+export function PostRideReflection({ athlete, plannedSession, log, loadHistory, intervals, coachBriefing }: Props) {
   const { messages, addMessage } = useChat(log.id)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -51,6 +52,7 @@ export function PostRideReflection({ athlete, plannedSession, log, loadHistory, 
           weight: athlete.weight,
           goals: athlete.goals,
         },
+        coachBriefing,
         planned: {
           label: plannedSession.label,
           type: plannedSession.type,

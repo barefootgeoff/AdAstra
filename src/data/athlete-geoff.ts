@@ -18,5 +18,6 @@ export const GEOFF: AthleteProfile = {
       priority: 'A',
     },
   ],
+  coachBriefing: "Training for Leadville 100 MTB 2026, goal sub-9 hours. This is my first 100-miler. I tend to go too hard on easy days — hold me accountable. Can only train before 6am on weekdays; weekends are flexible. Wife and 2 kids, so training has to fit around family.",
   updatedAt: '2026-03-15',
 }

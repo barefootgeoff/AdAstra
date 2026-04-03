@@ -27,6 +27,7 @@ interface TrainingContext {
     actualTSS?: number
     notes?: string
   }
+  coachBriefing?: string
   recentLoad: Array<{ date: string; ctl: number; atl: number; tsb: number; dailyTSS: number }>
   intervals?: Array<{ index: number; durationSec: number; avgWatts: number; maxWatts: number; avgHR?: number; tss: number }>
 }
@@ -38,7 +39,11 @@ function buildSystemPrompt(ctx: TrainingContext): string {
   const tsb = latest ? (latest.tsb > 0 ? `+${latest.tsb.toFixed(1)}` : latest.tsb.toFixed(1)) : 'unknown'
   const goal = athlete.goals[0]
 
-  return `You are a cycling coach having a post-ride debrief with ${athlete.name}.
+  const briefingSection = ctx.coachBriefing
+    ? `Coach briefing from the athlete:\n"${ctx.coachBriefing}"\n\n`
+    : ''
+
+  return `${briefingSection}You are a cycling coach having a post-ride debrief with ${athlete.name}.
 
 Athlete:
 - FTP ${athlete.ftp}W, Max HR ${athlete.maxHR}bpm, Weight ${athlete.weight}kg

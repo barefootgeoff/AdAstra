@@ -18,6 +18,7 @@ export interface AthleteProfile {
   ctlTarget: number    // race-day CTL goal
   primarySport: Sport
   goals: RaceGoal[]
+  coachBriefing?: string
   updatedAt: string    // ISO date string
 }
 
