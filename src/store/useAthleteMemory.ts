@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import type { AthleteMemory } from '../models/athlete'
+import type { AthleteMemory, AthleteMemoryKey } from '../models/athlete'
 
 const STORAGE_KEY = 'adastra:athlete:memory'
 
@@ -31,5 +31,14 @@ export function useAthleteMemory() {
     pushMemory(merged)
   }, [])
 
-  return { memory, mergeMemory }
+  const clearMemoryKey = useCallback((key: AthleteMemoryKey) => {
+    const current = loadMemory()
+    const updated = { ...current }
+    delete updated[key]
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+    setMemory(updated)
+    pushMemory(updated)
+  }, [])
+
+  return { memory, mergeMemory, clearMemoryKey }
 }

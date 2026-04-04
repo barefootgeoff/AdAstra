@@ -7,7 +7,6 @@ import type { TrainingPlan } from '../../models/training'
 import type { PlanEditProposal, CoachTab, TodayContext, ChatMessage, ChatThread } from '../../models/chat'
 import { useChat } from '../../store/useChat'
 import { useThreads } from '../../store/useThreads'
-import { useAthleteMemory } from '../../store/useAthleteMemory'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
 import { Markdown } from '../../utils/markdown'
 import { PlanEditApproval } from './PlanEditApproval'
@@ -45,6 +44,8 @@ interface Props {
   plan: TrainingPlan
   activeTab: CoachTab
   todayContext: TodayContext
+  memory: AthleteMemory
+  mergeMemory: (incoming: AthleteMemory) => void
   onClose: () => void
   onUpdateBriefing: (text: string) => void  // kept for App.tsx compat
   onApplyPlanEdits: (edits: PlanEditProposal[]) => void
@@ -54,9 +55,9 @@ interface Props {
 export function CoachChat({
   athlete, latestLoad, loadHistory, logs, plan,
   activeTab, todayContext,
+  memory, mergeMemory,
   onClose, onApplyPlanEdits, seedRide,
 }: Props) {
-  const { memory, mergeMemory } = useAthleteMemory()
   const { getRecentThreads, createThread, updateThreadTimestamp } = useThreads()
 
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null)
