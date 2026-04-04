@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { ChatMessage } from '../models/chat'
 
 function key(logId: string) {
@@ -14,6 +14,15 @@ export function useChat(logId: string) {
       return []
     }
   })
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(key(logId))
+      setMessages(raw ? (JSON.parse(raw) as ChatMessage[]) : [])
+    } catch {
+      setMessages([])
+    }
+  }, [logId])
 
   const persist = useCallback((msgs: ChatMessage[]) => {
     localStorage.setItem(key(logId), JSON.stringify(msgs))
