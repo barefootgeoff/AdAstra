@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../_session.js'
 import { callAnthropic } from '../_anthropic.js'
-import type { ChatMessage } from '../../src/models/chat'
+import type { AthleteMemory } from '../../src/models/athlete'
 
-interface TrainingContext {
+interface SummaryContext {
   athlete: {
     name: string
     ftp: number
@@ -11,6 +11,8 @@ interface TrainingContext {
     weight: number
     goals: Array<{ name: string; date: string; targetTime?: string }>
   }
+  coachBriefing?: string
+  memory?: AthleteMemory
   planned: {
     label: string
     type: string
@@ -28,58 +30,43 @@ interface TrainingContext {
     actualTSS?: number
     notes?: string
   }
-  coachBriefing?: string
   recentLoad: Array<{ date: string; ctl: number; atl: number; tsb: number; dailyTSS: number }>
   intervals?: Array<{ index: number; durationSec: number; avgWatts: number; maxWatts: number; avgHR?: number; tss: number }>
 }
 
-function buildSystemPrompt(ctx: TrainingContext): string {
+function buildSummaryPrompt(ctx: SummaryContext): string {
   const { athlete, planned, actual, recentLoad } = ctx
   const latest = recentLoad[recentLoad.length - 1]
   const ctl = latest ? latest.ctl.toFixed(1) : 'unknown'
   const tsb = latest ? (latest.tsb > 0 ? `+${latest.tsb.toFixed(1)}` : latest.tsb.toFixed(1)) : 'unknown'
   const goal = athlete.goals[0]
 
-  const briefingSection = ctx.coachBriefing
-    ? `Coach briefing from the athlete:\n"${ctx.coachBriefing}"\n\n`
-    : ''
+  return `You are a cycling coach. Write a concise 3–4 sentence ride summary for ${athlete.name}.
 
-  return `${briefingSection}You are a cycling coach having a post-ride debrief with ${athlete.name}.
+Athlete: FTP ${athlete.ftp}W, Max HR ${athlete.maxHR}bpm, CTL ${ctl}, TSB ${tsb}
+Goal: ${goal?.name ?? 'n/a'} on ${goal?.date ?? 'n/a'}
 
-Athlete:
-- FTP ${athlete.ftp}W, Max HR ${athlete.maxHR}bpm, Weight ${athlete.weight}kg
-- CTL (fitness): ${ctl}, TSB (form): ${tsb}
-- Goal: ${goal?.name ?? 'n/a'} on ${goal?.date ?? 'n/a'}, target ${goal?.targetTime ?? 'n/a'}
+Planned: ${planned.label} (${planned.type}), ${planned.duration ?? '—'}, ${planned.tss ?? '—'} TSS
+Why: ${planned.why ?? 'n/a'}
 
-Planned session:
-- ${planned.label} (${planned.type}), ${planned.duration ?? '—'}, ${planned.tss ?? '—'} TSS
-- Why: ${planned.why ?? 'n/a'}
+Actual: ${actual.durationMinutes ?? '—'}min, NP ${actual.normalizedWatts ?? '—'}W, avg HR ${actual.avgHR ?? '—'}bpm, TSS ${actual.actualTSS ?? '—'}, RPE ${actual.rpe ?? '—'}/10
+Notes: ${actual.notes ?? 'none'}
 
-What actually happened:
-- Duration: ${actual.durationMinutes ?? '—'}min, NP: ${actual.normalizedWatts ?? '—'}W
-- Avg HR: ${actual.avgHR ?? '—'}bpm, Peak HR: ${actual.peakHR ?? '—'}bpm
-- TSS: ${actual.actualTSS ?? '—'}, RPE: ${actual.rpe ?? '—'}/10
-- Notes: ${actual.notes ?? 'none'}
-
-Interval breakdown from power data:
 ${ctx.intervals && ctx.intervals.length > 0
-  ? ctx.intervals.map(iv => {
+  ? `Intervals: ${ctx.intervals.map(iv => {
       const dur = `${Math.floor(iv.durationSec / 60)}:${String(iv.durationSec % 60).padStart(2, '0')}`
-      return `  #${iv.index}: ${dur}, avg ${iv.avgWatts}W (${Math.round(iv.avgWatts / athlete.ftp * 100)}% FTP)${iv.avgHR ? `, HR ${iv.avgHR}bpm` : ''}`
-    }).join('\n')
-  : '  No interval data available'}
+      return `#${iv.index} ${dur} ${iv.avgWatts}W (${Math.round(iv.avgWatts / athlete.ftp * 100)}%FTP)`
+    }).join(', ')}`
+  : ''}
 
-Be concise (2–4 sentences), specific to the numbers, and direct. Speak to ${athlete.name} by name occasionally. Do not recite all the data back — use it to coach.`
+Write a direct, coach-style summary: what happened, how it compared to plan, one key takeaway. Do not use markdown. Speak to the athlete directly.`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') { res.status(405).end(); return }
   if (!requireAuth(req, res)) return
 
-  const { messages, context } = req.body as {
-    messages: ChatMessage[]
-    context: TrainingContext
-  }
+  const { context } = req.body as { context: SummaryContext }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
@@ -91,14 +78,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { text } = await callAnthropic({
       apiKey,
       model: 'claude-sonnet-4-6',
-      maxTokens: 512,
-      system: buildSystemPrompt(context),
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      maxTokens: 200,
+      system: buildSummaryPrompt(context),
+      messages: [{ role: 'user', content: 'Summarize this ride.' }],
     })
-    res.status(200).json({ reply: text })
+    res.status(200).json({ summary: text })
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
-    console.error('api/chat error:', err)
+    console.error('api/chat/summary error:', err)
     if (code === 'overloaded') {
       res.status(503).json({ error: 'overloaded' })
     } else {

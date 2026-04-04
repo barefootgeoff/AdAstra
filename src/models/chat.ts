@@ -35,3 +35,12 @@ export interface ChatMessage {
   planEdits?: PlanEditProposal[]
   editsApplied?: boolean
 }
+
+export interface ChatThread {
+  id: string            // e.g. "thread-1712345678901"
+  label: string         // "Apr 6 · General" or "Apr 3 · Post-Ride: Easy Endurance"
+  type: 'general' | 'ride'
+  logId?: string        // set for ride-originated threads
+  createdAt: string     // ISO datetime
+  lastMessageAt: string // ISO datetime — for sorting
+}

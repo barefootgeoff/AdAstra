@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { AthleteProfile } from '../../models/athlete'
+import type { AthleteMemory } from '../../models/athlete'
 import type { TrainingLoad } from '../../models/load'
 import type { WorkoutLog } from '../../models/log'
 import type { TrainingPlan } from '../../models/training'
-import type { PlanEditProposal, CoachTab, TodayContext } from '../../models/chat'
+import type { PlanEditProposal, CoachTab, TodayContext, ChatMessage, ChatThread } from '../../models/chat'
 import { useChat } from '../../store/useChat'
+import { useThreads } from '../../store/useThreads'
+import { useAthleteMemory } from '../../store/useAthleteMemory'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
 import { Markdown } from '../../utils/markdown'
 import { PlanEditApproval } from './PlanEditApproval'
@@ -43,30 +46,45 @@ interface Props {
   activeTab: CoachTab
   todayContext: TodayContext
   onClose: () => void
-  onUpdateBriefing: (text: string) => void
+  onUpdateBriefing: (text: string) => void  // kept for App.tsx compat
   onApplyPlanEdits: (edits: PlanEditProposal[]) => void
+  seedRide?: { sessionLabel: string; summaryText: string; logId: string } | null
 }
 
 export function CoachChat({
   athlete, latestLoad, loadHistory, logs, plan,
   activeTab, todayContext,
-  onClose, onUpdateBriefing, onApplyPlanEdits,
+  onClose, onApplyPlanEdits, seedRide,
 }: Props) {
-  const { messages, addMessage, updateMessage, clearMessages } = useChat('general')
+  const { memory, mergeMemory } = useAthleteMemory()
+  const { getRecentThreads, createThread, updateThreadTimestamp } = useThreads()
+
+  const [activeThread, setActiveThread] = useState<ChatThread | null>(null)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [editingBriefing, setEditingBriefing] = useState(false)
-  const [briefingDraft, setBriefingDraft] = useState(athlete.coachBriefing ?? '')
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Use active thread id as the chat key; fall back to '__none__' when no thread selected
+  const { messages, addMessage, updateMessage, clearMessages } = useChat(activeThread?.id ?? '__none__')
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  function saveBriefing() {
-    onUpdateBriefing(briefingDraft)
-    setEditingBriefing(false)
-  }
+  // On mount: if seedRide provided, create a ride thread and pre-seed it with the summary
+  useEffect(() => {
+    if (!seedRide) return
+    const thread = createThread('ride', seedRide.sessionLabel, seedRide.logId)
+    // Write seed message to localStorage before setting active thread so useChat picks it up
+    const seedMsg: ChatMessage = {
+      id: `seed-${Date.now()}`,
+      role: 'assistant',
+      content: seedRide.summaryText,
+      timestamp: new Date().toISOString(),
+    }
+    localStorage.setItem(`adastra:chat:${thread.id}`, JSON.stringify([seedMsg]))
+    setActiveThread(thread)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function buildContext() {
     const today = todayISO()
@@ -118,6 +136,7 @@ export function CoachChat({
     return {
       athlete: { name: athlete.name, ftp: athlete.ftp, maxHR: athlete.maxHR, weight: athlete.weight, goals: athlete.goals },
       coachBriefing: athlete.coachBriefing,
+      memory: Object.keys(memory).length > 0 ? memory : undefined,
       fitness: latestLoad ? { ctl: latestLoad.ctl, atl: latestLoad.atl, tsb: latestLoad.tsb } : null,
       currentWeek, nextWeek,
       recentLoad: loadHistory.slice(-14).map(l => ({ date: l.date, ctl: l.ctl, atl: l.atl, tsb: l.tsb, dailyTSS: l.dailyTSS })),
@@ -137,16 +156,17 @@ export function CoachChat({
   }, [updateMessage])
 
   async function send(text: string) {
-    if (!text.trim() || loading) return
-    const userMsg = {
+    if (!text.trim() || loading || !activeThread) return
+    const userMsg: ChatMessage = {
       id: Date.now().toString(),
-      role: 'user' as const,
+      role: 'user',
       content: text.trim(),
       timestamp: new Date().toISOString(),
     }
     addMessage(userMsg)
     setInput('')
     setLoading(true)
+    updateThreadTimestamp(activeThread.id)
 
     try {
       const res = await fetch('/api/chat/general', {
@@ -162,7 +182,7 @@ export function CoachChat({
         const errData = await res.json().catch(() => ({})) as { error?: string }
         throw new Error(errData.error === 'overloaded' ? 'overloaded' : 'chat_failed')
       }
-      const data = await res.json() as { reply: string; planEdits?: PlanEditProposal[] }
+      const data = await res.json() as { reply: string; planEdits?: PlanEditProposal[]; memoryUpdate?: AthleteMemory }
       addMessage({
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -171,6 +191,9 @@ export function CoachChat({
         planEdits: data.planEdits?.length ? data.planEdits : undefined,
         editsApplied: false,
       })
+      if (data.memoryUpdate) {
+        mergeMemory(data.memoryUpdate)
+      }
     } catch (err) {
       const isOverloaded = err instanceof Error && err.message === 'overloaded'
       addMessage({
@@ -186,19 +209,65 @@ export function CoachChat({
     }
   }
 
+  // ── Thread list view ─────────────────────────────────────────────────────────
+  if (!activeThread) {
+    const recentThreads = getRecentThreads()
+    return (
+      <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col animate-slide-up">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-blue-300 text-sm leading-none">✦</span>
+            <span className="text-sm font-semibold text-zinc-100 tracking-wide">Coach</span>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-xl leading-none px-1" aria-label="Close">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {recentThreads.length > 0 && (
+            <div className="mb-4">
+              <div className="text-[10px] tracking-widest text-zinc-600 uppercase mb-2">Recent</div>
+              <div className="flex flex-col gap-1">
+                {recentThreads.map(thread => (
+                  <button
+                    key={thread.id}
+                    onClick={() => setActiveThread(thread)}
+                    className="w-full text-left px-4 py-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl transition-colors"
+                  >
+                    <div className="text-sm text-zinc-200">{thread.label}</div>
+                    <div className="text-[10px] text-zinc-600 mt-0.5 uppercase tracking-wider">{thread.type === 'ride' ? 'Post-ride' : 'General'}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={() => setActiveThread(createThread('general'))}
+            className="w-full py-3 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-sm text-zinc-200 text-left transition-colors flex items-center gap-2"
+          >
+            <span className="text-blue-300 text-base">+</span>
+            New conversation
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Active thread view ───────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 bg-zinc-950 flex flex-col animate-slide-up">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-blue-300 text-sm leading-none">✦</span>
-          <span className="text-sm font-semibold text-zinc-100 tracking-wide">Coach</span>
           <button
-            onClick={() => { setEditingBriefing(!editingBriefing); setBriefingDraft(athlete.coachBriefing ?? '') }}
-            className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            onClick={() => setActiveThread(null)}
+            className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
+            aria-label="Back to threads"
           >
-            {editingBriefing ? 'Cancel' : 'Edit briefing'}
+            ←
           </button>
+          <span className="text-blue-300 text-sm leading-none">✦</span>
+          <span className="text-sm text-zinc-300 truncate max-w-[180px]">{activeThread.label}</span>
         </div>
         <div className="flex items-center gap-3">
           {messages.length > 0 && (
@@ -211,23 +280,6 @@ export function CoachChat({
           </button>
         </div>
       </div>
-
-      {/* Briefing editor */}
-      {editingBriefing && (
-        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Coach Briefing</p>
-          <textarea
-            value={briefingDraft}
-            onChange={e => setBriefingDraft(e.target.value)}
-            rows={4}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
-            placeholder="Tell your coach about your goals, constraints, and what to hold you accountable for…"
-          />
-          <button onClick={saveBriefing} className="mt-2 bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-1.5 rounded-lg transition-colors">
-            Save
-          </button>
-        </div>
-      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">

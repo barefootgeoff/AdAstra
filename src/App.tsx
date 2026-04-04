@@ -42,6 +42,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [coachChatOpen, setCoachChatOpen] = useState(false)
+  const [coachSeedRide, setCoachSeedRide] = useState<{ sessionLabel: string; summaryText: string; logId: string } | null>(null)
   const [authed, setAuthed] = useState<boolean | null>(null)
 
   const { syncState, serverData, pushAthlete, pushLogs, pushPlanOverrides } = useServerSync()
@@ -182,6 +183,11 @@ export default function App() {
             plan={plan}
             achievements={achievements}
             onSaveLog={handleSaveLog}
+            onOpenCoach={(seed) => {
+              setCoachSeedRide(seed ?? null)
+              setCoachChatOpen(true)
+              setDrawerOpen(false)
+            }}
           />
         )}
 
@@ -289,9 +295,10 @@ export default function App() {
         plan={plan}
         activeTab={tab}
         todayContext={todayContext}
-        onClose={() => setCoachChatOpen(false)}
+        onClose={() => { setCoachChatOpen(false); setCoachSeedRide(null) }}
         onUpdateBriefing={(text) => updateAthlete({ coachBriefing: text })}
         onApplyPlanEdits={applyPlanEdits}
+        seedRide={coachSeedRide}
       />
     )}
     </>

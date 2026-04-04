@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../_session.js'
 import { callAnthropic } from '../_anthropic.js'
 import type { ChatMessage, PlanEditProposal } from '../../src/models/chat'
+import type { AthleteMemory } from '../../src/models/athlete'
 
 interface GeneralChatContext {
   athlete: {
@@ -12,6 +13,7 @@ interface GeneralChatContext {
     goals: Array<{ name: string; date: string; targetTime?: string }>
   }
   coachBriefing?: string
+  memory?: AthleteMemory
   fitness: { ctl: number; atl: number; tsb: number } | null
   currentWeek: {
     weekNum: number
@@ -36,6 +38,7 @@ interface GeneralChatContext {
 }
 
 const PLAN_EDITS_MARKER = 'PLAN_EDITS_JSON:'
+const MEMORY_MARKER = 'ATHLETE_MEMORY_JSON:'
 
 function tsbState(tsb: number): string {
   if (tsb > 10) return 'fresh'
@@ -43,6 +46,32 @@ function tsbState(tsb: number): string {
   if (tsb > -10) return 'slightly fatigued'
   if (tsb > -20) return 'fatigued'
   return 'very fatigued'
+}
+
+function buildMemorySection(memory: AthleteMemory): string {
+  const entries = Object.entries(memory).filter(([, v]) => v)
+  if (entries.length === 0) return ''
+  const labelMap: Record<string, string> = {
+    experience: 'Experience', raceHistory: 'Race history', strengths: 'Strengths',
+    weaknesses: 'Watch for', injuryHistory: 'Injury watch', schedule: 'Schedule',
+    lifeContext: 'Life context', equipment: 'Equipment',
+    nutritionNotes: 'Nutrition', accountability: 'Accountability',
+  }
+  const lines = entries.map(([k, v]) => `- ${labelMap[k] ?? k}: ${v}`).join('\n')
+  return `Athlete background (from past conversations):\n${lines}\n\n`
+}
+
+function parseMemoryUpdate(text: string): { text: string; memoryUpdate: AthleteMemory | null } {
+  const markerIdx = text.lastIndexOf(MEMORY_MARKER)
+  if (markerIdx === -1) return { text, memoryUpdate: null }
+  const cleaned = text.slice(0, markerIdx).trim()
+  try {
+    const raw = text.slice(markerIdx + MEMORY_MARKER.length).trim()
+    const memoryUpdate = JSON.parse(raw) as AthleteMemory
+    return { text: cleaned, memoryUpdate }
+  } catch {
+    return { text: cleaned, memoryUpdate: null }
+  }
 }
 
 function parseReplyAndEdits(text: string): { reply: string; planEdits: PlanEditProposal[] } {
@@ -94,9 +123,9 @@ function buildSystemPrompt(ctx: GeneralChatContext): string {
   const { athlete, fitness, currentWeek, nextWeek, recentLoad, compliance } = ctx
   const goal = athlete.goals[0]
 
-  const briefingSection = ctx.coachBriefing
-    ? `Coach briefing from the athlete:\n"${ctx.coachBriefing}"\n\n`
-    : ''
+  const briefingSection = ctx.memory && Object.keys(ctx.memory).length > 0
+    ? buildMemorySection(ctx.memory)
+    : (ctx.coachBriefing ? `Coach briefing from the athlete:\n"${ctx.coachBriefing}"\n\n` : '')
 
   const viewContextSection = buildViewContextSection(ctx)
 
@@ -173,7 +202,13 @@ PLAN_EDITS_JSON:[
 
 IMPORTANT: dayDate must be copied exactly from the plan (e.g. "4/3", "4/6") — do not reformat it.
 To MOVE a session: include TWO entries — one to replace the original slot, one to fill the destination slot.
-Only include fields that actually change. Only add PLAN_EDITS_JSON when proposing concrete plan changes the athlete confirmed or asked for. The athlete sees an approval screen before anything is applied.`
+Only include fields that actually change. Only add PLAN_EDITS_JSON when proposing concrete plan changes the athlete confirmed or asked for. The athlete sees an approval screen before anything is applied.
+
+## Athlete Memory
+If the athlete shares personal context (training schedule, injuries, strengths, equipment, life context, accountability preferences, race history, etc.), extract it at the very end of your reply on a single line:
+ATHLETE_MEMORY_JSON:{"key":"value"}
+Valid keys: experience, raceHistory, strengths, weaknesses, injuryHistory, schedule, lifeContext, equipment, nutritionNotes, accountability
+Only include keys with new or updated information. If you include both PLAN_EDITS_JSON and ATHLETE_MEMORY_JSON, put ATHLETE_MEMORY_JSON last. Omit this line entirely if no new personal facts were shared.`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -199,8 +234,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       system: buildSystemPrompt(context),
       messages: messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
     })
-    const { reply, planEdits } = parseReplyAndEdits(rawText)
-    res.status(200).json({ reply, planEdits: planEdits.length ? planEdits : undefined })
+    // Strip ATHLETE_MEMORY_JSON last, then PLAN_EDITS_JSON
+    const { text: afterMemory, memoryUpdate } = parseMemoryUpdate(rawText)
+    const { reply, planEdits } = parseReplyAndEdits(afterMemory)
+    res.status(200).json({
+      reply,
+      planEdits: planEdits.length ? planEdits : undefined,
+      memoryUpdate: memoryUpdate ?? undefined,
+    })
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
     console.error('api/chat/general error:', err)
