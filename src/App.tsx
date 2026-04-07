@@ -3,6 +3,7 @@ import { useAthlete } from './store/useAthlete'
 import { useLogs } from './store/useLogs'
 import { usePlan } from './store/usePlan'
 import { useAchievements } from './store/useAchievements'
+import { useAthleteMemory } from './store/useAthleteMemory'
 import { useStrava } from './hooks/useStrava'
 import { useServerSync } from './hooks/useServerSync'
 import { computeAwards } from './utils/awards'
@@ -15,6 +16,7 @@ import { CritCalendar } from './components/plan/CritCalendar'
 import { LoginScreen } from './components/LoginScreen'
 import { TodayView } from './components/today/TodayView'
 import { CoachChat } from './components/chat/CoachChat'
+import { ProfileView } from './components/profile/ProfileView'
 import type { TrainingWeek } from './models/training'
 import type { WorkoutLog } from './models/log'
 import type { TodayContext } from './models/chat'
@@ -22,10 +24,10 @@ import { planDateToISO, todayISO } from './utils/dateHelpers'
 
 const SEED_DATE = '2026-03-15'
 
-type Tab = 'today' | 'plan' | 'fitness'
+type Tab = 'today' | 'plan' | 'fitness' | 'profile'
 
-const TAB_LABELS: Record<Tab, string> = { today: 'Today', plan: 'Plan', fitness: 'Fitness' }
-const TAB_ICONS: Record<Tab, string> = { today: '◎', plan: '≡', fitness: '∿' }
+const TAB_LABELS: Record<Tab, string> = { today: 'Today', plan: 'Plan', fitness: 'Fitness', profile: 'Profile' }
+const TAB_ICONS: Record<Tab, string> = { today: '◎', plan: '≡', fitness: '∿', profile: '◉' }
 
 function currentWeekIndex(weeks: TrainingWeek[]): number {
   const today = todayISO()
@@ -43,6 +45,7 @@ export default function App() {
   const [viewDate, setViewDate] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [coachChatOpen, setCoachChatOpen] = useState(false)
+  const [coachSeedRide, setCoachSeedRide] = useState<{ sessionLabel: string; summaryText: string; logId: string } | null>(null)
   const [authed, setAuthed] = useState<boolean | null>(null)
 
   const { syncState, serverData, pushAthlete, pushLogs, pushPlanOverrides } = useServerSync()
@@ -54,6 +57,7 @@ export default function App() {
   const { athlete, updateAthlete, hydrateFromServer: hydrateAthlete } = useAthlete({
     onPushAthlete: pushAthlete,
   })
+  const { memory, mergeMemory, clearMemoryKey } = useAthleteMemory()
   const {
     logs, saveLog, syncLogs, hydrateFromServer: hydrateLogs,
     loadHistory, latestLoad,
@@ -191,6 +195,11 @@ export default function App() {
             onSaveLog={handleSaveLog}
             viewDate={viewDate ?? undefined}
             onBack={viewDate ? () => { setViewDate(null); setTab('plan') } : undefined}
+            onOpenCoach={(seed) => {
+              setCoachSeedRide(seed ?? null)
+              setCoachChatOpen(true)
+              setDrawerOpen(false)
+            }}
           />
         )}
 
@@ -229,6 +238,15 @@ export default function App() {
             <WeeklyTSSSummary weeks={plan.weeks} logs={logs} />
           </>
         )}
+
+        {tab === 'profile' && (
+          <ProfileView
+            athlete={athlete}
+            updateAthlete={updateAthlete}
+            memory={memory}
+            clearMemoryKey={clearMemoryKey}
+          />
+        )}
       </div>
 
       {/* Side drawer backdrop */}
@@ -257,7 +275,7 @@ export default function App() {
 
         {/* Nav items */}
         <nav className="flex flex-col py-2">
-          {(['today', 'plan', 'fitness'] as Tab[]).map(t => (
+          {(['today', 'plan', 'fitness', 'profile'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => switchTab(t)}
@@ -297,11 +315,14 @@ export default function App() {
         loadHistory={loadHistory}
         logs={logs}
         plan={plan}
-        activeTab={tab}
+        activeTab={tab === 'profile' ? 'fitness' : tab}
         todayContext={todayContext}
-        onClose={() => setCoachChatOpen(false)}
+        memory={memory}
+        mergeMemory={mergeMemory}
+        onClose={() => { setCoachChatOpen(false); setCoachSeedRide(null) }}
         onUpdateBriefing={(text) => updateAthlete({ coachBriefing: text })}
         onApplyPlanEdits={applyPlanEdits}
+        seedRide={coachSeedRide}
       />
     )}
     </>
