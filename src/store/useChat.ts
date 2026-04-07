@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import type { ChatMessage } from '../models/chat'
 
 function key(logId: string) {
@@ -6,30 +6,14 @@ function key(logId: string) {
 }
 
 export function useChat(logId: string) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-
-  useEffect(() => {
-    // 1. Try localStorage first (fast, no network)
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const raw = localStorage.getItem(key(logId))
-      if (raw) {
-        setMessages(JSON.parse(raw) as ChatMessage[])
-        return
-      }
-    } catch {}
-
-    // 2. Fallback: fetch from server (covers new device / cleared cache)
-    setMessages([])
-    fetch(`/api/chat/messages?logId=${encodeURIComponent(logId)}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then((data: { messages: ChatMessage[] } | null) => {
-        if (data?.messages?.length) {
-          localStorage.setItem(key(logId), JSON.stringify(data.messages))
-          setMessages(data.messages)
-        }
-      })
-      .catch(() => {})
-  }, [logId])
+      return raw ? (JSON.parse(raw) as ChatMessage[]) : []
+    } catch {
+      return []
+    }
+  })
 
   const persist = useCallback((msgs: ChatMessage[]) => {
     localStorage.setItem(key(logId), JSON.stringify(msgs))
