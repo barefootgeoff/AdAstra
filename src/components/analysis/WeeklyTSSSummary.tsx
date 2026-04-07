@@ -33,8 +33,9 @@ export function WeeklyTSSSummary({ weeks, logs }: Props) {
     let actual = 0
     for (const day of w.days) {
       const iso = isoDateForDay(day, w.dates)
-      const log = logs.find(l => l.date === iso && l.completed)
-      if (log?.actualTSS) actual += log.actualTSS
+      for (const log of logs) {
+        if (log.date === iso && log.completed && log.actualTSS) actual += log.actualTSS
+      }
     }
     const pct = planned > 0 ? Math.round((actual / planned) * 100) : 0
     return { label: `W${w.week}`, planned, actual, pct }

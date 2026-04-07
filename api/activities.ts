@@ -8,7 +8,8 @@ interface StravaActivity {
   name: string
   type: string
   sport_type: string
-  start_date: string          // ISO 8601
+  start_date: string          // ISO 8601 (UTC)
+  start_date_local?: string   // ISO 8601 in athlete's local timezone
   moving_time: number         // seconds
   elapsed_time: number        // seconds
   weighted_average_watts?: number  // NP equivalent
@@ -64,7 +65,9 @@ function calcTSS(durationSecs: number, np: number, ftp: number): number {
 
 function mapActivity(act: StravaActivity, ftp: number): WorkoutLog {
   const np = act.weighted_average_watts ?? act.average_watts
-  const date = act.start_date.slice(0, 10)
+  // Strava's start_date is UTC; start_date_local is the athlete's local clock.
+  // We match plan days by local calendar date, so prefer start_date_local.
+  const date = (act.start_date_local ?? act.start_date).slice(0, 10)
   const tss = np ? calcTSS(act.moving_time, np, ftp) : undefined
 
   return {

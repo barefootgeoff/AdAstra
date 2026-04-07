@@ -8,6 +8,7 @@ import type { PlanEditProposal, CoachTab, TodayContext, ChatMessage, ChatThread 
 import { useChat } from '../../store/useChat'
 import { useThreads } from '../../store/useThreads'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
+import { findLogForSession } from '../../utils/logMatch'
 import { Markdown } from '../../utils/markdown'
 import { PlanEditApproval } from './PlanEditApproval'
 
@@ -115,7 +116,7 @@ export function CoachChat({
     if (currentWeekData) {
       const weekDays = currentWeekData.days.map(d => {
         const iso = planDateToISO(d.date, currentWeekData.dates)
-        const log = logs.find(l => l.date === iso)
+        const log = findLogForSession(logs, iso, d.type)
         return {
           label: d.label, type: d.type,
           day: d.day, date: d.date,

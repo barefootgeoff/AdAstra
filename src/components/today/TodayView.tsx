@@ -10,6 +10,7 @@ import { WorkoutAwards } from './WorkoutAwards'
 import { useRideSummary } from '../../hooks/useRideSummary'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
 import { daysUntil, computeRideMetrics } from '../../utils/trainingMath'
+import { findLogForSession } from '../../utils/logMatch'
 import type { Achievement } from '../../models/achievement'
 
 const TYPE_BADGE: Record<WorkoutType, { badge: string; label: string }> = {
@@ -70,10 +71,11 @@ interface Props {
   onSaveLog: (log: WorkoutLog) => void
   onOpenCoach: (seed?: { sessionLabel: string; summaryText: string; logId: string }) => void
   viewDate?: string           // ISO date; defaults to today
+  viewLogId?: string          // if set, render this specific log instead of type-matching
   onBack?: () => void          // if present, renders a back button
 }
 
-export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, achievements, onSaveLog, onOpenCoach, viewDate, onBack }: Props) {
+export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, achievements, onSaveLog, onOpenCoach, viewDate, viewLogId, onBack }: Props) {
   const [logging, setLogging] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [intervals, setIntervals] = useState<Interval[] | null>(null)
@@ -82,7 +84,9 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
   const today = viewDate ?? todayISO()
   const isToday = today === todayISO()
   const found = findSessionForDate(plan, today)
-  const todayLog = logs.find(l => l.date === today) ?? null
+  const todayLog = viewLogId
+    ? (logs.find(l => l.id === viewLogId) ?? null)
+    : findLogForSession(logs, today, found?.session.type)
   // For past dates, use the historical load snapshot instead of the current one.
   const displayedLoad = isToday
     ? latestLoad
