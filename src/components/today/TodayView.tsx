@@ -8,7 +8,7 @@ import { WorkoutLogger } from '../plan/WorkoutLogger'
 import { PostRideReflection } from './PostRideReflection'
 import { WorkoutAwards } from './WorkoutAwards'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
-import { daysUntil } from '../../utils/trainingMath'
+import { daysUntil, computeRideMetrics } from '../../utils/trainingMath'
 import type { Achievement } from '../../models/achievement'
 
 const TYPE_BADGE: Record<WorkoutType, { badge: string; label: string }> = {
@@ -35,11 +35,10 @@ function tsbLabel(tsb: number) {
   return 'VERY TIRED'
 }
 
-function findTodaySession(plan: TrainingPlan): { session: PlannedSession; weekNum: number } | null {
-  const today = todayISO()
+function findSessionForDate(plan: TrainingPlan, isoDate: string): { session: PlannedSession; weekNum: number } | null {
   for (const week of plan.weeks) {
     for (const day of week.days) {
-      if (planDateToISO(day.date, week.dates) === today) {
+      if (planDateToISO(day.date, week.dates) === isoDate) {
         return { session: day, weekNum: week.week }
       }
     }
@@ -68,17 +67,24 @@ interface Props {
   plan: TrainingPlan
   achievements: Achievement[]
   onSaveLog: (log: WorkoutLog) => void
+  viewDate?: string           // ISO date; defaults to today
+  onBack?: () => void          // if present, renders a back button
 }
 
-export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, achievements, onSaveLog }: Props) {
+export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, achievements, onSaveLog, viewDate, onBack }: Props) {
   const [logging, setLogging] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [intervals, setIntervals] = useState<Interval[] | null>(null)
   const [intervalsLoading, setIntervalsLoading] = useState(false)
 
-  const today = todayISO()
-  const found = findTodaySession(plan)
+  const today = viewDate ?? todayISO()
+  const isToday = today === todayISO()
+  const found = findSessionForDate(plan, today)
   const todayLog = logs.find(l => l.date === today) ?? null
+  // For past dates, use the historical load snapshot instead of the current one.
+  const displayedLoad = isToday
+    ? latestLoad
+    : (loadHistory.find(l => l.date === today) ?? latestLoad)
   const primaryGoal = athlete.goals[0]
   const daysToRace = primaryGoal ? daysUntil(primaryGoal.date) : null
 
@@ -94,17 +100,31 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
       .finally(() => setIntervalsLoading(false))
   }, [todayLog?.id, todayLog?.completed, athleteFTP])
 
+  const backButton = onBack ? (
+    <button
+      onClick={onBack}
+      className="text-zinc-500 hover:text-zinc-200 text-xs mb-3 flex items-center gap-1"
+    >
+      ← Back to plan
+    </button>
+  ) : null
+
   // ── No session in plan for today ─────────────────────────────────────────────
   if (!found) {
     return (
-      <div className="text-center py-16">
-        <div className="text-zinc-500 text-sm">{formatDate(today)}</div>
-        <div className="text-zinc-400 mt-4 text-base">No planned session today.</div>
-        {daysToRace !== null && (
-          <div className="text-zinc-600 text-xs mt-2 uppercase tracking-wider">
-            {daysToRace}d to {primaryGoal?.name}
+      <div>
+        {backButton}
+        <div className="text-center py-16">
+          <div className="text-zinc-500 text-sm">{formatDate(today)}</div>
+          <div className="text-zinc-400 mt-4 text-base">
+            {isToday ? 'No planned session today.' : 'No planned session on this date.'}
           </div>
-        )}
+          {daysToRace !== null && (
+            <div className="text-zinc-600 text-xs mt-2 uppercase tracking-wider">
+              {daysToRace}d to {primaryGoal?.name}
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -115,8 +135,10 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
 
   // ── POST-COMPLETION ──────────────────────────────────────────────────────────
   if (todayLog?.completed) {
+    const metrics = computeRideMetrics(todayLog, athlete)
     return (
       <div>
+        {backButton}
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -160,6 +182,39 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
             Edit
           </button>
         </div>
+
+        {/* Derived metrics row */}
+        {(metrics.work != null ||
+          metrics.intensityFactor != null ||
+          metrics.variabilityIndex != null ||
+          metrics.efficiencyFactor != null ||
+          metrics.wPerKg != null ||
+          metrics.totalElevationGain != null ||
+          metrics.vam != null) && (
+          <div className="flex items-center gap-2 flex-wrap mb-4">
+            {metrics.work != null && (
+              <MetricPill label="Work" value={`${Math.round(metrics.work)}kJ`} />
+            )}
+            {metrics.intensityFactor != null && (
+              <MetricPill label="IF" value={metrics.intensityFactor.toFixed(2)} />
+            )}
+            {metrics.variabilityIndex != null && (
+              <MetricPill label="VI" value={metrics.variabilityIndex.toFixed(2)} />
+            )}
+            {metrics.efficiencyFactor != null && (
+              <MetricPill label="EF" value={metrics.efficiencyFactor.toFixed(2)} />
+            )}
+            {metrics.wPerKg != null && (
+              <MetricPill label="W/kg" value={metrics.wPerKg.toFixed(1)} />
+            )}
+            {metrics.totalElevationGain != null && (
+              <MetricPill label="Elev" value={`${metrics.totalElevationGain}m`} />
+            )}
+            {metrics.vam != null && (
+              <MetricPill label="VAM" value={`${Math.round(metrics.vam)}m/h`} />
+            )}
+          </div>
+        )}
 
         {/* Quote + awards */}
         <WorkoutAwards log={todayLog} achievements={achievements} sessionType={session.type} />
@@ -214,6 +269,7 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
   // ── PRE-COMPLETION ───────────────────────────────────────────────────────────
   return (
     <div>
+      {backButton}
       {/* Date + race countdown */}
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -246,25 +302,27 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
       )}
 
       {/* Form snapshot */}
-      {latestLoad && (
+      {displayedLoad && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-4">
-          <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-2">Your Form Today</div>
+          <div className="text-[10px] tracking-widest text-zinc-500 uppercase mb-2">
+            {isToday ? 'Your Form Today' : 'Form That Day'}
+          </div>
           <div className="flex gap-4 text-sm">
             <div>
               <span className="text-zinc-500 text-xs">CTL </span>
-              <span className="font-mono text-blue-400">{latestLoad.ctl.toFixed(1)}</span>
+              <span className="font-mono text-blue-400">{displayedLoad.ctl.toFixed(1)}</span>
             </div>
             <div>
               <span className="text-zinc-500 text-xs">ATL </span>
-              <span className="font-mono text-zinc-300">{latestLoad.atl.toFixed(1)}</span>
+              <span className="font-mono text-zinc-300">{displayedLoad.atl.toFixed(1)}</span>
             </div>
             <div>
               <span className="text-zinc-500 text-xs">TSB </span>
-              <span className={`font-mono font-bold ${tsbColor(latestLoad.tsb)}`}>
-                {latestLoad.tsb > 0 ? '+' : ''}{latestLoad.tsb.toFixed(1)}
+              <span className={`font-mono font-bold ${tsbColor(displayedLoad.tsb)}`}>
+                {displayedLoad.tsb > 0 ? '+' : ''}{displayedLoad.tsb.toFixed(1)}
               </span>
-              <span className={`ml-1 text-[10px] uppercase tracking-wider ${tsbColor(latestLoad.tsb)}`}>
-                {tsbLabel(latestLoad.tsb)}
+              <span className={`ml-1 text-[10px] uppercase tracking-wider ${tsbColor(displayedLoad.tsb)}`}>
+                {tsbLabel(displayedLoad.tsb)}
               </span>
             </div>
           </div>

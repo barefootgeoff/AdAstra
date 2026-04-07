@@ -91,6 +91,65 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+// ─── Ride-level metric helpers ───────────────────────────────────────────────
+// Each returns null when inputs are missing or invalid.
+
+export function calculateWork(avgWatts?: number, durationSec?: number): number | null {
+  if (!avgWatts || !durationSec || avgWatts <= 0 || durationSec <= 0) return null
+  return (avgWatts * durationSec) / 1000
+}
+
+export function calculateIF(np?: number, ftp?: number): number | null {
+  if (!np || !ftp || np <= 0 || ftp <= 0) return null
+  return np / ftp
+}
+
+export function calculateVI(np?: number, avgWatts?: number): number | null {
+  if (!np || !avgWatts || np <= 0 || avgWatts <= 0) return null
+  return np / avgWatts
+}
+
+export function calculateEF(np?: number, avgHR?: number): number | null {
+  if (!np || !avgHR || np <= 0 || avgHR <= 0) return null
+  return np / avgHR
+}
+
+export function calculateWPerKg(avgWatts?: number, weightKg?: number): number | null {
+  if (!avgWatts || !weightKg || avgWatts <= 0 || weightKg <= 0) return null
+  return avgWatts / weightKg
+}
+
+export function calculateVAM(elevationM?: number, durationSec?: number): number | null {
+  if (!elevationM || !durationSec || elevationM <= 0 || durationSec <= 0) return null
+  return (elevationM / durationSec) * 3600
+}
+
+export interface RideMetrics {
+  work: number | null           // kJ
+  intensityFactor: number | null
+  variabilityIndex: number | null
+  efficiencyFactor: number | null
+  wPerKg: number | null
+  totalElevationGain: number | null  // m (passthrough)
+  vam: number | null            // m/h
+}
+
+export function computeRideMetrics(
+  log: WorkoutLog,
+  athlete: { ftp: number; weight: number },
+): RideMetrics {
+  const durationSec = log.durationMinutes ? log.durationMinutes * 60 : undefined
+  return {
+    work: calculateWork(log.avgWatts, durationSec),
+    intensityFactor: calculateIF(log.normalizedWatts, athlete.ftp),
+    variabilityIndex: calculateVI(log.normalizedWatts, log.avgWatts),
+    efficiencyFactor: calculateEF(log.normalizedWatts, log.avgHR),
+    wPerKg: calculateWPerKg(log.avgWatts, athlete.weight),
+    totalElevationGain: log.totalElevationGain ?? null,
+    vam: calculateVAM(log.totalElevationGain, durationSec),
+  }
+}
+
 // ─── Days until a target date ─────────────────────────────────────────────────
 export function daysUntil(targetISODate: string): number {
   const today = new Date()

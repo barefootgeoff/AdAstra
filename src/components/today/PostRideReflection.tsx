@@ -5,6 +5,7 @@ import type { WorkoutLog } from '../../models/log'
 import type { TrainingLoad } from '../../models/load'
 import type { Interval } from '../../models/interval'
 import { useChat } from '../../store/useChat'
+import { computeRideMetrics } from '../../utils/trainingMath'
 
 const OPENERS = [
   'How did I do today?',
@@ -61,15 +62,26 @@ export function PostRideReflection({ athlete, plannedSession, log, loadHistory, 
           details: plannedSession.details,
           why: plannedSession.why,
         },
-        actual: {
-          durationMinutes: log.durationMinutes,
-          normalizedWatts: log.normalizedWatts,
-          avgHR: log.avgHR,
-          peakHR: log.peakHR,
-          rpe: log.rpe,
-          actualTSS: log.actualTSS,
-          notes: log.notes,
-        },
+        actual: (() => {
+          const m = computeRideMetrics(log, athlete)
+          return {
+            durationMinutes: log.durationMinutes,
+            avgWatts: log.avgWatts,
+            normalizedWatts: log.normalizedWatts,
+            avgHR: log.avgHR,
+            peakHR: log.peakHR,
+            rpe: log.rpe,
+            actualTSS: log.actualTSS,
+            notes: log.notes,
+            work: m.work != null ? Math.round(m.work) : undefined,
+            intensityFactor: m.intensityFactor != null ? Number(m.intensityFactor.toFixed(2)) : undefined,
+            variabilityIndex: m.variabilityIndex != null ? Number(m.variabilityIndex.toFixed(2)) : undefined,
+            efficiencyFactor: m.efficiencyFactor != null ? Number(m.efficiencyFactor.toFixed(2)) : undefined,
+            wPerKg: m.wPerKg != null ? Number(m.wPerKg.toFixed(2)) : undefined,
+            totalElevationGain: m.totalElevationGain ?? undefined,
+            vam: m.vam != null ? Math.round(m.vam) : undefined,
+          }
+        })(),
         recentLoad: loadHistory.slice(-7).map(l => ({
           date: l.date, ctl: l.ctl, atl: l.atl, tsb: l.tsb, dailyTSS: l.dailyTSS,
         })),

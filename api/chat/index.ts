@@ -21,12 +21,20 @@ interface TrainingContext {
   }
   actual: {
     durationMinutes?: number
+    avgWatts?: number
     normalizedWatts?: number
     avgHR?: number
     peakHR?: number
     rpe?: number
     actualTSS?: number
     notes?: string
+    work?: number              // kJ
+    intensityFactor?: number
+    variabilityIndex?: number
+    efficiencyFactor?: number
+    wPerKg?: number
+    totalElevationGain?: number // m
+    vam?: number                // m/h
   }
   coachBriefing?: string
   recentLoad: Array<{ date: string; ctl: number; atl: number; tsb: number; dailyTSS: number }>
@@ -56,10 +64,10 @@ Planned session:
 - Why: ${planned.why ?? 'n/a'}
 
 What actually happened:
-- Duration: ${actual.durationMinutes ?? '—'}min, NP: ${actual.normalizedWatts ?? '—'}W
+- Duration: ${actual.durationMinutes ?? '—'}min, Avg: ${actual.avgWatts ?? '—'}W, NP: ${actual.normalizedWatts ?? '—'}W
 - Avg HR: ${actual.avgHR ?? '—'}bpm, Peak HR: ${actual.peakHR ?? '—'}bpm
 - TSS: ${actual.actualTSS ?? '—'}, RPE: ${actual.rpe ?? '—'}/10
-- Notes: ${actual.notes ?? 'none'}
+${actual.work != null ? `- Work: ${actual.work} kJ\n` : ''}${actual.intensityFactor != null ? `- IF: ${actual.intensityFactor}\n` : ''}${actual.variabilityIndex != null ? `- VI: ${actual.variabilityIndex}\n` : ''}${actual.efficiencyFactor != null ? `- EF: ${actual.efficiencyFactor}\n` : ''}${actual.wPerKg != null ? `- W/kg: ${actual.wPerKg}\n` : ''}${actual.totalElevationGain != null ? `- Elevation gain: ${actual.totalElevationGain} m\n` : ''}${actual.vam != null ? `- VAM: ${actual.vam} m/h\n` : ''}- Notes: ${actual.notes ?? 'none'}
 
 Interval breakdown from power data:
 ${ctx.intervals && ctx.intervals.length > 0
