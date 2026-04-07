@@ -40,6 +40,7 @@ function currentWeekIndex(weeks: TrainingWeek[]): number {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
+  const [viewDate, setViewDate] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [coachChatOpen, setCoachChatOpen] = useState(false)
   const [authed, setAuthed] = useState<boolean | null>(null)
@@ -127,7 +128,13 @@ export default function App() {
 
   function switchTab(t: Tab) {
     setTab(t)
+    setViewDate(null)  // clear any date override when user manually switches tabs
     setDrawerOpen(false)
+  }
+
+  function openWorkoutDetail(isoDate: string) {
+    setViewDate(isoDate)
+    setTab('today')
   }
 
   function openCoach() {
@@ -182,6 +189,8 @@ export default function App() {
             plan={plan}
             achievements={achievements}
             onSaveLog={handleSaveLog}
+            viewDate={viewDate ?? undefined}
+            onBack={viewDate ? () => { setViewDate(null); setTab('plan') } : undefined}
           />
         )}
 
@@ -196,6 +205,7 @@ export default function App() {
                 logs={logs}
                 athleteFTP={athlete.ftp}
                 onSaveLog={saveLog}
+                onOpenDetail={openWorkoutDetail}
               />
             ))}
             <CritCalendar />

@@ -73,9 +73,10 @@ interface Props {
   athleteFTP: number
   weekCompleted?: boolean
   onSaveLog: (log: WorkoutLog) => void
+  onOpenDetail?: (isoDate: string) => void
 }
 
-export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, weekCompleted = false, onSaveLog }: Props) {
+export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, weekCompleted = false, onSaveLog, onOpenDetail }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [logging, setLogging] = useState(false)
   const config = TYPE_CONFIG[session.type]
@@ -114,6 +115,15 @@ export function DayCard({ session, planId, isoDate, existingLog, athleteFTP, wee
                   title="Log workout"
                 >
                   ✎
+                </button>
+              )}
+              {onOpenDetail && (
+                <button
+                  onClick={e => { e.stopPropagation(); onOpenDetail(isoDate) }}
+                  className="text-zinc-500 hover:text-zinc-200 text-xs px-1.5 py-0.5 rounded hover:bg-zinc-700/50 transition-colors"
+                  title="Open workout detail"
+                >
+                  ↗
                 </button>
               )}
               <span className="text-zinc-500 text-[10px]">{expanded ? '▲' : '▼'}</span>

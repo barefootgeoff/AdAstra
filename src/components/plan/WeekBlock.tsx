@@ -11,9 +11,10 @@ interface Props {
   logs: WorkoutLog[]
   athleteFTP: number
   onSaveLog: (log: WorkoutLog) => void
+  onOpenDetail?: (isoDate: string) => void
 }
 
-export function WeekBlock({ week, planId, defaultOpen = false, logs, athleteFTP, onSaveLog }: Props) {
+export function WeekBlock({ week, planId, defaultOpen = false, logs, athleteFTP, onSaveLog, onOpenDetail }: Props) {
   const [open, setOpen] = useState(defaultOpen)
 
   const completedCount = week.days.filter(day => {
@@ -88,6 +89,7 @@ export function WeekBlock({ week, planId, defaultOpen = false, logs, athleteFTP,
                 athleteFTP={athleteFTP}
                 weekCompleted={week.completed ?? false}
                 onSaveLog={onSaveLog}
+                onOpenDetail={onOpenDetail}
               />
             )
           })}
