@@ -5,8 +5,9 @@ import type { WorkoutLog } from '../../models/log'
 import type { PlannedSession, TrainingPlan, WorkoutType } from '../../models/training'
 import type { Interval } from '../../models/interval'
 import { WorkoutLogger } from '../plan/WorkoutLogger'
-import { PostRideReflection } from './PostRideReflection'
+import { RideSummary } from './RideSummary'
 import { WorkoutAwards } from './WorkoutAwards'
+import { useRideSummary } from '../../hooks/useRideSummary'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
 import { daysUntil } from '../../utils/trainingMath'
 import type { Achievement } from '../../models/achievement'
@@ -68,9 +69,10 @@ interface Props {
   plan: TrainingPlan
   achievements: Achievement[]
   onSaveLog: (log: WorkoutLog) => void
+  onOpenCoach: (seed?: { sessionLabel: string; summaryText: string; logId: string }) => void
 }
 
-export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, achievements, onSaveLog }: Props) {
+export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, plan, achievements, onSaveLog, onOpenCoach }: Props) {
   const [logging, setLogging] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [intervals, setIntervals] = useState<Interval[] | null>(null)
@@ -81,6 +83,15 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
   const todayLog = logs.find(l => l.date === today) ?? null
   const primaryGoal = athlete.goals[0]
   const daysToRace = primaryGoal ? daysUntil(primaryGoal.date) : null
+
+  // Ride summary — called unconditionally before any early returns
+  const { summary: rideSummary, loading: summaryLoading } = useRideSummary({
+    athlete,
+    plannedSession: found?.session ?? null,
+    log: todayLog?.completed ? todayLog : null,
+    loadHistory,
+    intervals: intervals ?? [],
+  })
 
   // Fetch power stream intervals for completed Strava activities
   useEffect(() => {
@@ -186,14 +197,15 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
           </div>
         )}
 
-        {/* AI coach chat */}
-        <PostRideReflection
-          athlete={athlete}
-          plannedSession={session}
-          log={todayLog}
-          loadHistory={loadHistory}
-          intervals={intervals ?? []}
-          coachBriefing={athlete.coachBriefing}
+        {/* Ride summary + discuss button */}
+        <RideSummary
+          summary={rideSummary}
+          loading={summaryLoading}
+          onDiscuss={() => onOpenCoach(rideSummary ? {
+            sessionLabel: session.label,
+            summaryText: rideSummary,
+            logId: todayLog.id,
+          } : undefined)}
         />
 
         {logging && (

@@ -1,11 +1,19 @@
 import { useState, useCallback } from 'react'
 import type { AthleteProfile } from '../models/athlete'
 import { getAthleteProfile, saveAthleteProfile } from './storage'
-import { GEOFF } from '../data/athlete-geoff'
+import { GEOFF, OLD_COACH_BRIEFING } from '../data/athlete-geoff'
 
 function loadOrSeed(): AthleteProfile {
   const stored = getAthleteProfile()
-  if (stored) return stored
+  if (stored) {
+    // One-time migration: replace old default briefing with the new one
+    if (stored.coachBriefing === OLD_COACH_BRIEFING) {
+      const migrated = { ...stored, coachBriefing: GEOFF.coachBriefing }
+      saveAthleteProfile(migrated)
+      return migrated
+    }
+    return stored
+  }
   saveAthleteProfile(GEOFF)
   return GEOFF
 }

@@ -1,5 +1,12 @@
 export type Sport = 'cycling' | 'running' | 'strength' | 'swimming'
 
+export type AthleteMemoryKey =
+  | 'experience' | 'raceHistory' | 'strengths' | 'weaknesses'
+  | 'injuryHistory' | 'schedule' | 'lifeContext' | 'equipment'
+  | 'nutritionNotes' | 'accountability'
+
+export type AthleteMemory = Partial<Record<AthleteMemoryKey, string>>
+
 export interface RaceGoal {
   name: string        // "Leadville 100 MTB"
   date: string        // "2026-08-15"
