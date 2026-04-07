@@ -78,6 +78,8 @@ export function useRideSummary({ athlete, plannedSession, log, loadHistory, inte
           wPerKg: m.wPerKg != null ? Number(m.wPerKg.toFixed(2)) : undefined,
           totalElevationGain: m.totalElevationGain ?? undefined,
           vam: m.vam != null ? Math.round(m.vam) : undefined,
+          distanceMiles: m.distanceMiles != null ? Number(m.distanceMiles.toFixed(2)) : undefined,
+          avgSpeedMph: m.avgSpeedMph != null ? Number(m.avgSpeedMph.toFixed(1)) : undefined,
         }
       })(),
       recentLoad: loadHistory.slice(-7).map(l => ({

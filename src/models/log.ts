@@ -21,6 +21,7 @@ export interface WorkoutLog {
   rpe?: number              // 1–10 rating of perceived exertion
   actualTSS?: number        // calculated from NP or entered manually
   totalElevationGain?: number  // meters, from Strava activity summary
+  distanceMeters?: number      // meters, from Strava activity summary
   notes?: string
   loggedAt: string          // ISO datetime
 }

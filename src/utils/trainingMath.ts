@@ -124,6 +124,16 @@ export function calculateVAM(elevationM?: number, durationSec?: number): number 
   return (elevationM / durationSec) * 3600
 }
 
+export function metersToMiles(m: number): number {
+  return m / 1609.344
+}
+
+// Avg speed in mph from total distance (m) + moving time (sec)
+export function calculateAvgSpeedMph(distanceMeters?: number, durationSec?: number): number | null {
+  if (!distanceMeters || !durationSec || distanceMeters <= 0 || durationSec <= 0) return null
+  return metersToMiles(distanceMeters) / (durationSec / 3600)
+}
+
 export interface RideMetrics {
   work: number | null           // kJ
   intensityFactor: number | null
@@ -132,6 +142,8 @@ export interface RideMetrics {
   wPerKg: number | null
   totalElevationGain: number | null  // m (passthrough)
   vam: number | null            // m/h
+  distanceMiles: number | null
+  avgSpeedMph: number | null
 }
 
 export function computeRideMetrics(
@@ -147,6 +159,8 @@ export function computeRideMetrics(
     wPerKg: calculateWPerKg(log.avgWatts, athlete.weight),
     totalElevationGain: log.totalElevationGain ?? null,
     vam: calculateVAM(log.totalElevationGain, durationSec),
+    distanceMiles: log.distanceMeters ? metersToMiles(log.distanceMeters) : null,
+    avgSpeedMph: calculateAvgSpeedMph(log.distanceMeters, durationSec),
   }
 }
 

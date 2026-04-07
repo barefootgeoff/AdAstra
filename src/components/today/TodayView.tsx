@@ -7,6 +7,7 @@ import type { Interval } from '../../models/interval'
 import { WorkoutLogger } from '../plan/WorkoutLogger'
 import { RideSummary } from './RideSummary'
 import { WorkoutAwards } from './WorkoutAwards'
+import { ZoneModal } from './ZoneModal'
 import { useRideSummary } from '../../hooks/useRideSummary'
 import { planDateToISO, todayISO } from '../../utils/dateHelpers'
 import { daysUntil, computeRideMetrics } from '../../utils/trainingMath'
@@ -80,6 +81,7 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [intervals, setIntervals] = useState<Interval[] | null>(null)
   const [intervalsLoading, setIntervalsLoading] = useState(false)
+  const [zoneModal, setZoneModal] = useState<'power' | 'hr' | null>(null)
 
   const today = viewDate ?? todayISO()
   const isToday = today === todayISO()
@@ -178,14 +180,31 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
           {todayLog.actualTSS != null && (
             <MetricPill label="TSS" value={String(todayLog.actualTSS)} />
           )}
+          {todayLog.avgWatts != null && (
+            <MetricPill
+              label="Avg P"
+              value={`${todayLog.avgWatts}W`}
+              onClick={athlete.ftp ? () => setZoneModal('power') : undefined}
+            />
+          )}
           {todayLog.normalizedWatts != null && (
             <MetricPill label="NP" value={`${todayLog.normalizedWatts}W`} />
           )}
           {todayLog.durationMinutes != null && (
             <MetricPill label="Time" value={`${todayLog.durationMinutes}min`} />
           )}
+          {metrics.distanceMiles != null && (
+            <MetricPill label="Dist" value={`${metrics.distanceMiles.toFixed(1)}mi`} />
+          )}
+          {metrics.avgSpeedMph != null && (
+            <MetricPill label="Speed" value={`${metrics.avgSpeedMph.toFixed(1)}mph`} />
+          )}
           {todayLog.avgHR != null && (
-            <MetricPill label="HR" value={`${todayLog.avgHR}bpm`} />
+            <MetricPill
+              label="HR"
+              value={`${todayLog.avgHR}bpm`}
+              onClick={athlete.maxHR ? () => setZoneModal('hr') : undefined}
+            />
           )}
           {todayLog.rpe != null && (
             <MetricPill label="RPE" value={`${todayLog.rpe}/10`} />
@@ -276,6 +295,23 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
             isoDate={today}
             onSave={log => { onSaveLog(log); setLogging(false) }}
             onClose={() => setLogging(false)}
+          />
+        )}
+
+        {zoneModal === 'power' && todayLog.avgWatts != null && (
+          <ZoneModal
+            kind="power"
+            value={todayLog.avgWatts}
+            ftp={athlete.ftp}
+            onClose={() => setZoneModal(null)}
+          />
+        )}
+        {zoneModal === 'hr' && todayLog.avgHR != null && (
+          <ZoneModal
+            kind="hr"
+            value={todayLog.avgHR}
+            maxHR={athlete.maxHR}
+            onClose={() => setZoneModal(null)}
           />
         )}
       </div>
@@ -422,7 +458,20 @@ export function TodayView({ athlete, latestLoad, logs, loadHistory, athleteFTP, 
   )
 }
 
-function MetricPill({ label, value }: { label: string; value: string }) {
+function MetricPill({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="bg-zinc-800 hover:bg-zinc-700 rounded-lg px-3 py-1.5 flex flex-col items-center min-w-[52px] cursor-pointer transition-colors relative"
+      >
+        <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>
+        <span className="text-zinc-200 font-mono text-sm font-medium">{value}</span>
+        <span className="absolute top-0.5 right-1 text-[8px] text-zinc-600">↗</span>
+      </button>
+    )
+  }
   return (
     <div className="bg-zinc-800 rounded-lg px-3 py-1.5 flex flex-col items-center min-w-[52px]">
       <span className="text-[9px] text-zinc-500 uppercase tracking-wider">{label}</span>

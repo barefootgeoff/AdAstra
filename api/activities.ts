@@ -18,6 +18,7 @@ interface StravaActivity {
   max_heartrate?: number
   suffer_score?: number
   total_elevation_gain?: number    // meters
+  distance?: number                // meters
 }
 
 // Matches WorkoutLog in src/models/log.ts
@@ -34,6 +35,7 @@ interface WorkoutLog {
   peakHR?: number
   actualTSS?: number
   totalElevationGain?: number
+  distanceMeters?: number
   notes?: string
   loggedAt: string
 }
@@ -83,6 +85,7 @@ function mapActivity(act: StravaActivity, ftp: number): WorkoutLog {
     peakHR: act.max_heartrate ? Math.round(act.max_heartrate) : undefined,
     actualTSS: tss,
     totalElevationGain: act.total_elevation_gain != null ? Math.round(act.total_elevation_gain) : undefined,
+    distanceMeters: act.distance != null ? Math.round(act.distance) : undefined,
     notes: act.name,
     loggedAt: act.start_date,
   }
