@@ -12,6 +12,7 @@ interface StravaLap {
   average_watts?: number
   average_heartrate?: number
   max_heartrate?: number
+  average_cadence?: number
   start_index: number   // index into activity stream
 }
 
@@ -22,6 +23,7 @@ interface StreamData {
 interface Streams {
   watts?: StreamData
   heartrate?: StreamData
+  cadence?: StreamData
 }
 
 // ─── TSS calculation ──────────────────────────────────────────────────────────
@@ -32,6 +34,42 @@ function calcTSS(durationSec: number, avgWatts: number, ftp: number): number {
   return Math.round((durationSec * avgWatts * IF) / (ftp * 3600) * 100)
 }
 
+// ─── Zone / pacing / NP helpers ───────────────────────────────────────────────
+
+function classifyZone(avgWatts: number, ftp: number): Interval['zone'] {
+  const pct = avgWatts / ftp
+  if (pct >= 1.05) return 'vo2'
+  if (pct >= 0.96) return 'threshold'
+  return 'sweetspot'
+}
+
+function computePacingRatio(slice: number[]): number | undefined {
+  if (slice.length < 10) return undefined
+  const mid = Math.floor(slice.length / 2)
+  const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length
+  const first = avg(slice.slice(0, mid))
+  const second = avg(slice.slice(mid))
+  return first > 0 ? Math.round((second / first) * 100) / 100 : undefined
+}
+
+// Normalized Power for a segment: 30s rolling avg → ^4 → mean → ^0.25
+function computeNP(slice: number[]): number {
+  if (slice.length === 0) return 0
+  const smoothed = rollingAvg(slice, 30)
+  const mean4th = smoothed.reduce((sum, w) => sum + Math.pow(w, 4), 0) / smoothed.length
+  return Math.round(Math.pow(mean4th, 0.25))
+}
+
+function segmentCadence(
+  cadence: (number | null)[] | undefined,
+  start: number,
+  end: number,
+): number | undefined {
+  if (!cadence) return undefined
+  const slice = cadence.slice(start, end + 1).filter((c): c is number => c != null)
+  return slice.length > 0 ? Math.round(slice.reduce((a, b) => a + b, 0) / slice.length) : undefined
+}
+
 // ─── Laps → Intervals ─────────────────────────────────────────────────────────
 
 function lapsToIntervals(laps: StravaLap[], ftp: number): Interval[] {
@@ -40,6 +78,9 @@ function lapsToIntervals(laps: StravaLap[], ftp: number): Interval[] {
     const avgWatts = lap.average_watts ? Math.round(lap.average_watts) : 0
     const startSec = cumulativeSec
     cumulativeSec += lap.moving_time
+    const intensityFactor = avgWatts > 0 && ftp > 0
+      ? Math.round((avgWatts / ftp) * 100) / 100
+      : undefined
     return {
       index: i + 1,
       startSec,
@@ -47,6 +88,10 @@ function lapsToIntervals(laps: StravaLap[], ftp: number): Interval[] {
       avgWatts,
       avgHR: lap.average_heartrate ? Math.round(lap.average_heartrate) : undefined,
       tss: calcTSS(lap.moving_time, avgWatts, ftp),
+      zone: avgWatts > 0 ? classifyZone(avgWatts, ftp) : undefined,
+      avgCadence: lap.average_cadence ? Math.round(lap.average_cadence) : undefined,
+      intensityFactor,
+      // pacingRatio and vi not computable from lap summaries alone
     }
   })
 }
@@ -66,6 +111,7 @@ function rollingAvg(data: number[], windowSec: number): number[] {
 function detectIntervalsFromStream(
   watts: (number | null)[],
   heartrate: (number | null)[] | undefined,
+  cadence: (number | null)[] | undefined,
   ftp: number,
 ): Interval[] {
   const threshold = ftp * 0.88  // sweetspot+
@@ -116,7 +162,24 @@ function detectIntervalsFromStream(
         }
       }
 
-      return { index: i + 1, startSec: s.start, durationSec, avgWatts, maxWatts, avgHR, tss }
+      const np = computeNP(slice)
+      const vi = avgWatts > 0 ? Math.round((np / avgWatts) * 100) / 100 : undefined
+      const intensityFactor = ftp > 0 ? Math.round((np / ftp) * 100) / 100 : undefined
+
+      return {
+        index: i + 1,
+        startSec: s.start,
+        durationSec,
+        avgWatts,
+        maxWatts,
+        avgHR,
+        tss,
+        zone: classifyZone(avgWatts, ftp),
+        pacingRatio: computePacingRatio(slice),
+        avgCadence: segmentCadence(cadence, s.start, s.end),
+        vi,
+        intensityFactor,
+      }
     })
 }
 
@@ -152,7 +215,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── 2. Fall back to power stream detection ────────────────────────────────
     const streamsRes = await fetch(
-      `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=watts,heartrate&key_by_type=true`,
+      `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=watts,heartrate,cadence&key_by_type=true`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     )
 
@@ -166,7 +229,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ intervals: [], source: 'none' })
     }
 
-    const intervals = detectIntervalsFromStream(streams.watts.data, streams.heartrate?.data, ftp)
+    const intervals = detectIntervalsFromStream(streams.watts.data, streams.heartrate?.data, streams.cadence?.data, ftp)
     res.status(200).json({ intervals, source: 'stream' })
 
   } catch (err) {

@@ -92,6 +92,11 @@ export function useRideSummary({ athlete, plannedSession, log, loadHistory, inte
         maxWatts: iv.maxWatts,
         avgHR: iv.avgHR,
         tss: iv.tss,
+        zone: iv.zone,
+        pacingRatio: iv.pacingRatio,
+        avgCadence: iv.avgCadence,
+        vi: iv.vi,
+        intensityFactor: iv.intensityFactor,
       })),
     }
 

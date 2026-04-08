@@ -39,7 +39,19 @@ interface SummaryContext {
     vam?: number                // m/h
   }
   recentLoad: Array<{ date: string; ctl: number; atl: number; tsb: number; dailyTSS: number }>
-  intervals?: Array<{ index: number; durationSec: number; avgWatts: number; maxWatts: number; avgHR?: number; tss: number }>
+  intervals?: Array<{
+    index: number
+    durationSec: number
+    avgWatts: number
+    maxWatts?: number
+    avgHR?: number
+    tss: number
+    zone?: string
+    pacingRatio?: number
+    avgCadence?: number
+    vi?: number
+    intensityFactor?: number
+  }>
 }
 
 function buildSummaryPrompt(ctx: SummaryContext): string {
@@ -71,13 +83,26 @@ Actual: ${actual.durationMinutes ?? '—'}min, avg ${actual.avgWatts ?? '—'}W,
 Notes: ${actual.notes ?? 'none'}
 
 ${ctx.intervals && ctx.intervals.length > 0
-  ? `Intervals: ${ctx.intervals.map(iv => {
+  ? `Intervals:\n${ctx.intervals.map(iv => {
       const dur = `${Math.floor(iv.durationSec / 60)}:${String(iv.durationSec % 60).padStart(2, '0')}`
-      return `#${iv.index} ${dur} ${iv.avgWatts}W (${Math.round(iv.avgWatts / athlete.ftp * 100)}%FTP)`
-    }).join(', ')}`
+      const zone = iv.zone ? `[${iv.zone.toUpperCase()}]` : `[${Math.round(iv.avgWatts / athlete.ftp * 100)}%FTP]`
+      const pacing = iv.pacingRatio != null
+        ? (iv.pacingRatio >= 1.02 ? `neg-split +${Math.round((iv.pacingRatio - 1) * 100)}%`
+           : iv.pacingRatio <= 0.98 ? `pos-split -${Math.round((1 - iv.pacingRatio) * 100)}%`
+           : 'even pacing')
+        : ''
+      const extras = [
+        iv.intensityFactor != null && `IF:${iv.intensityFactor}`,
+        iv.vi != null && `VI:${iv.vi}`,
+        iv.avgCadence != null && `${iv.avgCadence}rpm`,
+        iv.avgHR != null && `${iv.avgHR}bpm`,
+        pacing,
+      ].filter(Boolean).join(' ')
+      return `  #${iv.index} ${dur} ${iv.avgWatts}W ${zone}${extras ? ' — ' + extras : ''}`
+    }).join('\n')}`
   : ''}
 
-Write a direct, coach-style summary: what happened, how it compared to plan, one key takeaway. Do not use markdown. Speak to the athlete directly. Reference whichever of the metrics are genuinely notable — don't recite them all.`
+Write a warm, encouraging 3–4 sentence summary. Lead with one genuine positive from the ride. Note how it compared to the plan. Close with one forward-looking takeaway. If anything fell short, frame it as a learning not a failure. No markdown. Speak directly to ${athlete.name}.`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
