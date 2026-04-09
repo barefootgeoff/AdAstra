@@ -2,7 +2,9 @@ import { useState } from 'react'
 import type { TrainingWeek } from '../../models/training'
 import type { WorkoutLog } from '../../models/log'
 import { DayCard } from './DayCard'
+import { SecondaryLogCard } from './SecondaryLogCard'
 import { planDateToISO } from '../../utils/dateHelpers'
+import { findLogForSession, findExtraLogs } from '../../utils/logMatch'
 
 interface Props {
   week: TrainingWeek
@@ -11,9 +13,11 @@ interface Props {
   logs: WorkoutLog[]
   athleteFTP: number
   onSaveLog: (log: WorkoutLog) => void
+  onOpenDetail?: (isoDate: string) => void
+  onOpenLog?: (logId: string) => void
 }
 
-export function WeekBlock({ week, planId, defaultOpen = false, logs, athleteFTP, onSaveLog }: Props) {
+export function WeekBlock({ week, planId, defaultOpen = false, logs, athleteFTP, onSaveLog, onOpenDetail, onOpenLog }: Props) {
   const [open, setOpen] = useState(defaultOpen)
 
   const completedCount = week.days.filter(day => {
@@ -77,18 +81,29 @@ export function WeekBlock({ week, planId, defaultOpen = false, logs, athleteFTP,
           )}
           {week.days.map((day, i) => {
             const iso = planDateToISO(day.date, week.dates)
-            const existingLog = logs.find(l => l.date === iso) ?? null
+            const primary = findLogForSession(logs, iso, day.type)
+            const extras = findExtraLogs(logs, iso, primary?.id)
             return (
-              <DayCard
-                key={i}
-                session={day}
-                planId={planId}
-                isoDate={iso}
-                existingLog={existingLog}
-                athleteFTP={athleteFTP}
-                weekCompleted={week.completed ?? false}
-                onSaveLog={onSaveLog}
-              />
+              <div key={i}>
+                <DayCard
+                  session={day}
+                  planId={planId}
+                  isoDate={iso}
+                  existingLog={primary}
+                  athleteFTP={athleteFTP}
+                  weekCompleted={week.completed ?? false}
+                  onSaveLog={onSaveLog}
+                  onOpenDetail={onOpenDetail}
+                />
+                {extras.map(extra => (
+                  <div key={extra.id} className="mt-1">
+                    <SecondaryLogCard
+                      log={extra}
+                      onOpen={(id) => onOpenLog?.(id)}
+                    />
+                  </div>
+                ))}
+              </div>
             )
           })}
         </div>

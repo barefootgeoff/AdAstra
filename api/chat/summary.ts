@@ -23,12 +23,20 @@ interface SummaryContext {
   }
   actual: {
     durationMinutes?: number
+    avgWatts?: number
     normalizedWatts?: number
     avgHR?: number
     peakHR?: number
     rpe?: number
     actualTSS?: number
     notes?: string
+    work?: number              // kJ
+    intensityFactor?: number
+    variabilityIndex?: number
+    efficiencyFactor?: number
+    wPerKg?: number
+    totalElevationGain?: number // m
+    vam?: number                // m/h
   }
   recentLoad: Array<{ date: string; ctl: number; atl: number; tsb: number; dailyTSS: number }>
   intervals?: Array<{ index: number; durationSec: number; avgWatts: number; maxWatts: number; avgHR?: number; tss: number }>
@@ -41,6 +49,16 @@ function buildSummaryPrompt(ctx: SummaryContext): string {
   const tsb = latest ? (latest.tsb > 0 ? `+${latest.tsb.toFixed(1)}` : latest.tsb.toFixed(1)) : 'unknown'
   const goal = athlete.goals[0]
 
+  const extras: string[] = []
+  if (actual.work != null) extras.push(`Work ${actual.work}kJ`)
+  if (actual.intensityFactor != null) extras.push(`IF ${actual.intensityFactor}`)
+  if (actual.variabilityIndex != null) extras.push(`VI ${actual.variabilityIndex}`)
+  if (actual.efficiencyFactor != null) extras.push(`EF ${actual.efficiencyFactor}`)
+  if (actual.wPerKg != null) extras.push(`${actual.wPerKg}W/kg`)
+  if (actual.totalElevationGain != null) extras.push(`${actual.totalElevationGain}m climbed`)
+  if (actual.vam != null) extras.push(`VAM ${actual.vam}m/h`)
+  const extrasLine = extras.length > 0 ? `\nMetrics: ${extras.join(', ')}` : ''
+
   return `You are a cycling coach. Write a concise 3–4 sentence ride summary for ${athlete.name}.
 
 Athlete: FTP ${athlete.ftp}W, Max HR ${athlete.maxHR}bpm, CTL ${ctl}, TSB ${tsb}
@@ -49,7 +67,7 @@ Goal: ${goal?.name ?? 'n/a'} on ${goal?.date ?? 'n/a'}
 Planned: ${planned.label} (${planned.type}), ${planned.duration ?? '—'}, ${planned.tss ?? '—'} TSS
 Why: ${planned.why ?? 'n/a'}
 
-Actual: ${actual.durationMinutes ?? '—'}min, NP ${actual.normalizedWatts ?? '—'}W, avg HR ${actual.avgHR ?? '—'}bpm, TSS ${actual.actualTSS ?? '—'}, RPE ${actual.rpe ?? '—'}/10
+Actual: ${actual.durationMinutes ?? '—'}min, avg ${actual.avgWatts ?? '—'}W, NP ${actual.normalizedWatts ?? '—'}W, avg HR ${actual.avgHR ?? '—'}bpm, TSS ${actual.actualTSS ?? '—'}, RPE ${actual.rpe ?? '—'}/10${extrasLine}
 Notes: ${actual.notes ?? 'none'}
 
 ${ctx.intervals && ctx.intervals.length > 0
@@ -59,7 +77,7 @@ ${ctx.intervals && ctx.intervals.length > 0
     }).join(', ')}`
   : ''}
 
-Write a direct, coach-style summary: what happened, how it compared to plan, one key takeaway. Do not use markdown. Speak to the athlete directly.`
+Write a direct, coach-style summary: what happened, how it compared to plan, one key takeaway. Do not use markdown. Speak to the athlete directly. Reference whichever of the metrics are genuinely notable — don't recite them all.`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

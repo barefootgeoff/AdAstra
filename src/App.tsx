@@ -21,6 +21,7 @@ import type { TrainingWeek } from './models/training'
 import type { WorkoutLog } from './models/log'
 import type { TodayContext } from './models/chat'
 import { planDateToISO, todayISO } from './utils/dateHelpers'
+import { findLogForSession } from './utils/logMatch'
 
 const SEED_DATE = '2026-03-15'
 
@@ -42,6 +43,8 @@ function currentWeekIndex(weeks: TrainingWeek[]): number {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
+  const [viewDate, setViewDate] = useState<string | null>(null)
+  const [viewLogId, setViewLogId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [coachChatOpen, setCoachChatOpen] = useState(false)
   const [coachSeedRide, setCoachSeedRide] = useState<{ sessionLabel: string; summaryText: string; logId: string } | null>(null)
@@ -102,7 +105,7 @@ export default function App() {
         if (planDateToISO(day.date, week.dates) === todayStr) return day
     return null
   })()
-  const todayLogEntry = logs.find(l => l.date === todayStr) ?? null
+  const todayLogEntry = findLogForSession(logs, todayStr, todayPlanEntry?.type)
   const todayContext: TodayContext = {
     session: todayPlanEntry
       ? { label: todayPlanEntry.label, type: todayPlanEntry.type, details: todayPlanEntry.details, tss: todayPlanEntry.tss, duration: todayPlanEntry.duration }
@@ -131,7 +134,23 @@ export default function App() {
 
   function switchTab(t: Tab) {
     setTab(t)
+    setViewDate(null)  // clear any date override when user manually switches tabs
+    setViewLogId(null)
     setDrawerOpen(false)
+  }
+
+  function openWorkoutDetail(isoDate: string) {
+    setViewDate(isoDate)
+    setViewLogId(null)
+    setTab('today')
+  }
+
+  function openLogDetail(logId: string) {
+    const log = logs.find(l => l.id === logId)
+    if (!log) return
+    setViewDate(log.date)
+    setViewLogId(logId)
+    setTab('today')
   }
 
   function openCoach() {
@@ -186,6 +205,9 @@ export default function App() {
             plan={plan}
             achievements={achievements}
             onSaveLog={handleSaveLog}
+            viewDate={viewDate ?? undefined}
+            viewLogId={viewLogId ?? undefined}
+            onBack={viewDate ? () => { setViewDate(null); setViewLogId(null); setTab('plan') } : undefined}
             onOpenCoach={(seed) => {
               setCoachSeedRide(seed ?? null)
               setCoachChatOpen(true)
@@ -205,6 +227,8 @@ export default function App() {
                 logs={logs}
                 athleteFTP={athlete.ftp}
                 onSaveLog={saveLog}
+                onOpenDetail={openWorkoutDetail}
+                onOpenLog={openLogDetail}
               />
             ))}
             <CritCalendar />

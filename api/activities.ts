@@ -8,7 +8,8 @@ interface StravaActivity {
   name: string
   type: string
   sport_type: string
-  start_date: string          // ISO 8601
+  start_date: string          // ISO 8601 (UTC)
+  start_date_local?: string   // ISO 8601 in athlete's local timezone
   moving_time: number         // seconds
   elapsed_time: number        // seconds
   weighted_average_watts?: number  // NP equivalent
@@ -16,6 +17,8 @@ interface StravaActivity {
   average_heartrate?: number
   max_heartrate?: number
   suffer_score?: number
+  total_elevation_gain?: number    // meters
+  distance?: number                // meters
 }
 
 // Matches WorkoutLog in src/models/log.ts
@@ -31,6 +34,8 @@ interface WorkoutLog {
   avgHR?: number
   peakHR?: number
   actualTSS?: number
+  totalElevationGain?: number
+  distanceMeters?: number
   notes?: string
   loggedAt: string
 }
@@ -62,7 +67,9 @@ function calcTSS(durationSecs: number, np: number, ftp: number): number {
 
 function mapActivity(act: StravaActivity, ftp: number): WorkoutLog {
   const np = act.weighted_average_watts ?? act.average_watts
-  const date = act.start_date.slice(0, 10)
+  // Strava's start_date is UTC; start_date_local is the athlete's local clock.
+  // We match plan days by local calendar date, so prefer start_date_local.
+  const date = (act.start_date_local ?? act.start_date).slice(0, 10)
   const tss = np ? calcTSS(act.moving_time, np, ftp) : undefined
 
   return {
@@ -77,6 +84,8 @@ function mapActivity(act: StravaActivity, ftp: number): WorkoutLog {
     avgHR: act.average_heartrate ? Math.round(act.average_heartrate) : undefined,
     peakHR: act.max_heartrate ? Math.round(act.max_heartrate) : undefined,
     actualTSS: tss,
+    totalElevationGain: act.total_elevation_gain != null ? Math.round(act.total_elevation_gain) : undefined,
+    distanceMeters: act.distance != null ? Math.round(act.distance) : undefined,
     notes: act.name,
     loggedAt: act.start_date,
   }
