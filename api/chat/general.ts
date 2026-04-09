@@ -119,6 +119,35 @@ Session details: ${detailsLine}`
   return 'Current view: Athlete is looking at their fitness/load metrics (CTL, ATL, TSB) — likely wants analysis of training load trends or pacing toward race day.'
 }
 
+function buildPatternSection(
+  recentLoad: GeneralChatContext['recentLoad'],
+): string {
+  const lines: string[] = []
+
+  // Active training days in last 14 (dailyTSS > 0 = training day)
+  const activeDays = recentLoad.filter(d => d.dailyTSS > 0).length
+  if (activeDays > 0) lines.push(`Active days last 14: ${activeDays}/${recentLoad.length}`)
+
+  // 7-day CTL ramp rate
+  if (recentLoad.length >= 7) {
+    const week = recentLoad.slice(-7)
+    const ctlChange = week[week.length - 1].ctl - week[0].ctl
+    const rampLabel = ctlChange > 5 ? ' ⚠ aggressive ramp' : ctlChange < -2 ? ' (declining)' : ''
+    lines.push(`7-day CTL ramp: ${ctlChange >= 0 ? '+' : ''}${ctlChange.toFixed(1)}${rampLabel}`)
+  }
+
+  // TSB trajectory over last 5 days
+  if (recentLoad.length >= 5) {
+    const last5 = recentLoad.slice(-5)
+    const tsbChange = last5[last5.length - 1].tsb - last5[0].tsb
+    const traj = tsbChange > 2 ? 'improving (freshening)' : tsbChange < -2 ? 'declining (loading)' : 'stable'
+    lines.push(`TSB trajectory (5d): ${traj}`)
+  }
+
+  if (lines.length === 0) return ''
+  return `\nTraining patterns:\n${lines.map(l => `- ${l}`).join('\n')}`
+}
+
 function buildSystemPrompt(ctx: GeneralChatContext): string {
   const { athlete, fitness, currentWeek, nextWeek, recentLoad, compliance } = ctx
   const goal = athlete.goals[0]
@@ -160,6 +189,8 @@ ${nextWeek.days.map(d => `  ○ ${d.day} ${d.date} — ${d.label} (${d.type})`).
 
   const complianceSection = `Last 14 days: ${compliance.completed} completed, ${compliance.skipped} skipped (of ${compliance.planned} planned)`
 
+  const patternSection = buildPatternSection(recentLoad)
+
   return `${briefingSection}You are a cycling coach having a training conversation with ${athlete.name}.
 
 Athlete:
@@ -176,9 +207,17 @@ ${nextWeekSection ? '\n' + nextWeekSection : ''}
 Training compliance:
 ${complianceSection}
 ${loadTrend ? loadTrend : ''}
+${patternSection}
+
+## Coaching Behavior
+- **Positive first**: Open every workout debrief by recognizing what the athlete did well — only then note anything to adjust.
+- **Be concise**: Keep replies to ≤150 words for conversational questions. No preamble, no restating the question.
+- **Charitable assumption**: Assume the athlete gave their best effort given the conditions. Never imply failure without first asking what happened.
+- **Progressive reasoning**: When evaluating a completed workout — (1) what was the intent? (2) what happened? (3) what went well? (4) one forward takeaway. Never lead with criticism.
+- **One insight**: Offer one key coaching point per reply. Don't pile on multiple critiques.
 
 ## Formatting
-Use markdown in your replies: **bold** for emphasis, bullet lists for session details, ## headings for sections, and --- to separate sections. Keep replies focused and conversational.
+Use markdown in your replies: **bold** for emphasis, bullet lists for session details, ## headings for sections, and --- to separate sections. Keep replies focused and conversational — aim for ≤150 words unless the athlete asks for detail.
 
 ## Plan Editing
 You can propose direct edits to the athlete's training plan. When proposing changes (swapping sessions, adjusting targets, moving sessions to other days), include a JSON block at the very end of your reply using EXACTLY this format:
